@@ -1,0 +1,37 @@
+// Firestore security rules for the Spain 2027 planner.
+// Paste into Firebase console → Firestore → Rules, replacing OWNER_EMAIL with the owner's sign-in email
+// (lowercase). The real email is kept out of this public repo on purpose.
+//
+// - The owner can always sign in and manages the guest list (members/{email}).
+// - Anyone on the guest list can read and edit the trip data.
+// - Flights can be created once and are then read-only.
+// - Everyone else (even if signed in) can't read or write anything.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function email() {
+      return request.auth != null && request.auth.token.email is string
+        ? request.auth.token.email.lower() : '';
+    }
+    function isOwner() { return email() == 'OWNER_EMAIL'; }
+    function isMember() {
+      return isOwner() || (email() != '' && exists(/databases/$(database)/documents/members/$(email())));
+    }
+
+    match /members/{memberEmail} {
+      allow read: if isMember();
+      allow write: if isOwner();
+    }
+
+    match /meta/{docId} {
+      allow read: if isMember();
+      allow create: if isOwner();
+      allow update, delete: if isOwner() && docId != 'flights';
+    }
+
+    match /{coll}/{rest=**} {
+      allow read, write: if isMember()
+        && coll in ['session', 'routes', 'rankings', 'cards', 'days', 'parking', 'history', 'people'];
+    }
+  }
+}

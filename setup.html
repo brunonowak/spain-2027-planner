@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spain 2027 · Setup</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇪🇸</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { boot, state, onState, esc, $, $$, seedStarter, store, isDemo } from './js/common.js';
+    const root = document.getElementById('app');
+    await boot(root, { surface: 'setup' });
+    root.innerHTML = `<div class="plain-page">
+      <p><a href="phone.html${location.search}">← Back to the planner</a></p>
+      <h1>Setup</h1>
+      <p class="muted">Only the trip owner can make these changes — the security rules enforce that.</p>
+      <div class="ph-card"><h2>Guest list</h2>
+        <p class="muted" style="margin-top:0">Only these addresses can sign in. Use the exact email each person signs in with (Google or Microsoft).</p>
+        <ul class="list-plain" id="members"></ul>
+        <form class="inline-form" id="m-form" style="flex-wrap:wrap">
+          <input class="input" id="m-name" placeholder="Name (e.g. Zita)" required style="flex:1 1 120px">
+          <input class="input" id="m-email" type="email" placeholder="email@example.com" required style="flex:2 1 200px">
+          <button class="btn btn-primary">Add</button>
+        </form>
+      </div>
+      <div class="ph-card"><h2>Starter content</h2>
+        <p class="muted" style="margin-top:0">Loads the 4 route options and the starter idea cards. Safe to run again — it only adds what’s missing and never overwrites edits.</p>
+        <button class="btn btn-primary" id="seed">Load starter content</button> <span id="seed-msg" class="muted"></span>
+      </div>
+      <div class="ph-card"><h2>Flights</h2>
+        <p class="muted" style="margin-top:0">Choose the <b>flights.json</b> file Claude gave you. Flights can only be loaded once and are read-only afterwards.</p>
+        <input type="file" id="flights-file" accept="application/json,.json"> <span id="f-msg" class="muted"></span>
+      </div>
+      <p class="tiny muted">Signed in as ${esc(state.me.email)}${isDemo ? ' (demo)' : ''}</p>
+    </div>`;
+
+    const renderMembers = () => {
+      $('#members').innerHTML = state.members.map((m) => `<li><b>${esc(m.name)}</b><span class="grow muted">${esc(m.id)}</span><button class="btn btn-ghost" data-rm="${esc(m.id)}">Remove</button></li>`).join('') || '<li class="muted">Nobody yet — add yourself first.</li>';
+      $$('[data-rm]').forEach((b) => (b.onclick = async () => { if (confirm('Remove ' + b.dataset.rm + '?')) await store.deleteDoc('members/' + b.dataset.rm).catch(fail); }));
+    };
+    onState(renderMembers); renderMembers();
+    const fail = (e) => alert('That didn’t work: ' + (e.code === 'permission-denied' ? 'only the owner can do this.' : e.message));
+
+    $('#m-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const email = $('#m-email').value.trim().toLowerCase(), name = $('#m-name').value.trim();
+      await store.setDoc('members/' + email, { name }).then(() => { $('#m-email').value = ''; $('#m-name').value = ''; }).catch(fail);
+    };
+    $('#seed').onclick = async () => {
+      $('#seed-msg').textContent = 'Loading…';
+      try { const n = await seedStarter(); $('#seed-msg').textContent = n ? `Added ${n} items.` : 'Everything was already there.'; }
+      catch (e) { $('#seed-msg').textContent = ''; fail(e); }
+    };
+    $('#flights-file').onchange = async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        if (!Array.isArray(data.sections)) throw new Error('This doesn’t look like the flights file.');
+        await store.setDoc('meta/flights', data);
+        $('#f-msg').textContent = '✓ Flights loaded';
+      } catch (err) { fail(err); }
+    };
+  </script>
+</body>
+</html>
