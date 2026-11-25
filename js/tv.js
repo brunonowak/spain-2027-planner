@@ -3,7 +3,7 @@ import {
   lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
   imageHtml, cardImage, cardWiki, parseVideo, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js?v=580274';
+} from './common.js?v=580565';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
@@ -165,7 +165,7 @@ function renderBases(main) {
     ${card.tip ? `<p class="tip">💡 ${esc(card.tip)}</p>` : ''}
     <div class="facts">
       <div class="fact"><b>Time</b>${esc(card.time || '—')}</div>
-      <div class="fact"><b>Cost</b>${esc(card.cost || '—')}</div>
+      <div class="fact"><b>Cost per person</b>${esc(card.cost || '—')}</div>
       <div class="fact"><b>Book ahead?</b>${esc(card.booking || '—')}</div>
     </div>
     <div class="vote-panel">

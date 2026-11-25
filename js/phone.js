@@ -4,7 +4,7 @@ import {
   voters, voteCounts, autoTier, tierOf, vote, saveCard, addCard, deleteCard, decide, scheduleCard, undo,
   setRanking, lockRoute, routeScores, planCards, addIdea, deleteIdea, setDayNote, addComment, watchComments,
   imageHtml, cardWiki, parseVideo, youtubeSearch, sortedCards, signOut, isDemo, revealed,
-} from './common.js?v=580274';
+} from './common.js?v=580565';
 
 const root = document.getElementById('app');
 const ui = {
@@ -330,8 +330,9 @@ function openCard(id, tries = 0) {
     ${c.tip ? `<p style="margin:10px 0 0;color:var(--accent-2);font-size:14px">💡 ${esc(c.tip)}</p>` : ''}
     <div id="wiki"></div>
     <div class="facts-sm">
-      ${c.time ? `<span class="chip">⏱ ${esc(c.time)}</span>` : ''}${c.cost ? `<span class="chip">💶 ${esc(c.cost)}</span>` : ''}${c.booking ? `<span class="chip">🎟 ${esc(c.booking)}</span>` : ''}
+      ${c.time ? `<span class="chip">⏱ ${esc(c.time)}</span>` : ''}${c.booking ? `<span class="chip">🎟 ${esc(c.booking)}</span>` : ''}
     </div>
+    ${c.cost ? `<p style="margin:4px 0 10px;font-size:14px">💶 <b>Per person:</b> ${esc(c.cost)}${c.costSource ? ` · <a href="${esc(c.costSource)}" target="_blank" rel="noopener">price source ↗</a>` : ''}</p>` : ''}
     ${vid ? `<a class="btn" href="${esc(vid.url)}" target="_blank" rel="noopener">▶ Watch video</a>` : `<a class="btn" href="${esc(youtubeSearch(c))}" target="_blank" rel="noopener">🔎 Find a short video</a>`}
     <div id="sheet-votes"></div>
     <div class="sheet-actions"><button class="btn" id="edit">✏️ Edit</button><button class="btn btn-danger" id="del">Delete</button><button class="btn btn-ghost" id="close">Close</button></div>
@@ -393,7 +394,7 @@ function openEdit(id, preset = {}) {
       <label class="field">Photo link (optional)<input name="image" type="url" inputmode="url" value="${esc(c.image || '')}" placeholder="Paste an image address"></label>
       <div class="grid2">
         <label class="field">Time needed<input name="time" value="${esc(c.time || '')}" placeholder="2h, half day…"></label>
-        <label class="field">Rough cost<input name="cost" value="${esc(c.cost || '')}" placeholder="Free, €, €€…"></label>
+        <label class="field">Cost per person<input name="cost" value="${esc(c.cost || '')}" placeholder="e.g. €15, or ~€30 (estimate)"></label>
       </div>
       <label class="field">Book ahead?<input name="booking" value="${esc(c.booking || '')}" placeholder="No / Timed ticket / Book months ahead"></label>
       <label class="field">Link for more info (optional)<input name="link" type="url" inputmode="url" value="${esc(c.link || '')}"></label>

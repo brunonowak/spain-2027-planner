@@ -1,8 +1,8 @@
 // Shared state, helpers and actions for the TV and phone sites.
-import * as S from './store.js?v=580274';
-import { ROUTES, CARDS, DETAILS, TRIP_START } from './seed.js?v=580274';
+import * as S from './store.js?v=580565';
+import { ROUTES, CARDS, DETAILS, PRICES, TRIP_START } from './seed.js?v=580565';
 
-export { isDemo } from './store.js?v=580274';
+export { isDemo } from './store.js?v=580565';
 
 export const STEPS = [
   { id: 'route', label: 'Pick the route' },
@@ -408,14 +408,18 @@ export async function seedStarter() {
   }
   for (const [i, c] of CARDS.entries()) {
     const [highlights, tip] = DETAILS[c.id] || [[], ''];
+    const [cost, costSource] = PRICES[c.id] || [c.cost, ''];
     const existing = await S.getDoc('cards/' + c.id);
     if (!existing) {
       const { id, ...rest } = c;
-      await S.setDoc('cards/' + id, { ...rest, highlights, tip, order: i, votes: {}, createdAt: now() + i, createdBy: 'Starter' });
+      await S.setDoc('cards/' + id, { ...rest, cost, costSource, highlights, tip, order: i, votes: {}, createdAt: now() + i, createdBy: 'Starter' });
       added++;
-    } else if (!existing.highlights && highlights.length) {
-      await S.updateDoc('cards/' + c.id, { highlights, tip: existing.tip || tip }); // add details without touching edits or votes
-      added++;
+    } else {
+      // Fill in newer starter details without touching anything people edited or voted on.
+      const patch = {};
+      if (!existing.highlights && highlights.length) { patch.highlights = highlights; if (!existing.tip) patch.tip = tip; }
+      if (/^(Free|€+)$/.test(existing.cost || '') && cost !== existing.cost) { patch.cost = cost; patch.costSource = costSource; }
+      if (Object.keys(patch).length) { await S.updateDoc('cards/' + c.id, patch); added++; }
     }
   }
   if (!(await S.getDoc('session/state'))) await S.setDoc('session/state', { step: 'route', baseIndex: 0, cardIndex: 0 });
@@ -428,7 +432,7 @@ async function seedDemo() {
     await S.setDoc('members/' + email, { name: n });
     await S.setDoc('people/demo-' + n.toLowerCase(), { uid: 'demo-' + n.toLowerCase(), email, name: n });
   }
-  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=580274');
+  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=580565');
   await S.setDoc('meta/flights', DEMO_FLIGHTS);
 }
 export { S as store };
