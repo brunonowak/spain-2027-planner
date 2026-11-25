@@ -174,10 +174,17 @@ export async function boot(root, { surface }) {
   return new Promise((resolve) => {
     S.auth().onChange(async (u) => {
       if (!u) return renderSignIn(root, surface);
+      if (state.me?.uid === u.uid) return; // already running for this user
       state.user = u;
-      let ok = true;
-      try { await S.getDoc('session/state'); } catch (e) { ok = false; console.warn(e); }
-      if (!ok) return renderNotAllowed(root, u);
+      // Membership check. Only a "permission-denied" answer means not on the list;
+      // anything else (network hiccup, token not ready yet on mobile) is retried, then shown as an error.
+      let err = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try { await S.getDoc('session/state'); err = null; break; }
+        catch (e) { err = e; console.warn('membership check', attempt, e); if (e?.code === 'permission-denied' && attempt >= 1) break; await new Promise((r) => setTimeout(r, 800 * (attempt + 1))); }
+      }
+      if (err?.code === 'permission-denied') return renderNotAllowed(root, u, err);
+      if (err) return renderError(root, err);
       const memberDoc = await S.getDoc('members/' + u.email).catch(() => null);
       const name = memberDoc?.name || (u.displayName || u.email).split(' ')[0];
       state.me = { uid: u.uid, email: u.email, name };
@@ -230,7 +237,20 @@ function renderSignIn(root, surface) {
     }));
 }
 
-function renderNotAllowed(root, u) {
+function renderError(root, e) {
+  root.innerHTML = `
+    <div class="center-screen signin">
+      <div class="signin-card">
+        <div class="brand-mark">⚠️</div>
+        <h1>Couldn’t connect</h1>
+        <p>The trip data didn’t load. Check your connection and try again.</p>
+        <p class="tiny muted">${esc(e?.code || '')} ${esc(e?.message || '')}</p>
+        <button class="btn btn-primary" onclick="location.reload()">Try again</button>
+      </div>
+    </div>`;
+}
+
+function renderNotAllowed(root, u, err) {
   root.innerHTML = `
     <div class="center-screen signin">
       <div class="signin-card">
@@ -238,6 +258,7 @@ function renderNotAllowed(root, u) {
         <h1>Not on the list yet</h1>
         <p>You’re signed in as <b>${esc(u.email)}</b>, which isn’t on the trip’s guest list.</p>
         <p class="muted">Send that address to Bruno so he can add you.</p>
+        <p class="tiny muted">${esc(err?.code || '')}</p>
         <button class="btn" id="signout">Use a different account</button>
       </div>
     </div>`;

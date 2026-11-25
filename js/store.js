@@ -33,7 +33,8 @@ async function firebaseImpl() {
     import(SDK + 'firebase-auth.js'),
   ]);
   const app = initializeApp(firebaseConfig);
-  const db = fs.getFirestore(app);
+  // Auto-detect long polling: more reliable on iPhone Safari and some networks.
+  const db = fs.initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
   const a = au.getAuth(app);
   const snapDoc = (s) => (s.exists() ? { id: s.id, ...s.data() } : null);
   const snapCol = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }));
