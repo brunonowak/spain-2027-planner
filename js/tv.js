@@ -2,8 +2,8 @@ import {
   boot, state, onState, STEPS, CITIES, CATS, TIER_LABEL, esc, $, $$, fmtDate, addDays, initials,
   lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
-  imageHtml, cardImage, parseVideo, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js?v=579944';
+  imageHtml, cardImage, cardWiki, parseVideo, youtubeSearch, sortedCards, isDemo, revealed,
+} from './common.js?v=580274';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
@@ -67,7 +67,7 @@ function renderRoute(main) {
 
   main.innerHTML = `
     <h2 class="h-section">${locked ? 'Route locked in' : reveal ? 'The group’s ranking' : 'Rank the four routes'}</h2>
-    <p class="lead">${locked ? 'Next we go base by base through the ideas.' : reveal ? 'Talk it over, then lock one in.' : `Everyone ranks 1st to 4th on their phone. ${vs.filter((v) => rankedUids.has(v.uid)).length} of ${vs.length} done:`}
+    <p class="lead">${locked ? 'Next we go base by base through the ideas.' : reveal ? 'Sorted by group score: each person’s 1st choice = 4 points, 2nd = 3, 3rd = 2, 4th = 1. Talk it over, then lock one in.' : `Everyone ranks 1st to 4th on their phone. ${vs.filter((v) => rankedUids.has(v.uid)).length} of ${vs.length} done:`}
       ${!reveal && !locked ? vs.map((v) => `<span class="chip" style="margin-left:.4em">${rankedUids.has(v.uid) ? '✅' : '⏳'} ${esc(v.name)}</span>`).join('') : ''}
       ${!locked ? `<button class="btn ${reveal ? '' : 'btn-primary'}" id="reveal" style="margin-left:1em" ${state.rankings.length ? '' : 'disabled'}>${reveal ? 'Hide results' : 'Reveal results'}</button>` : `<button class="btn" id="unlock" style="margin-left:1em">Unlock</button>`}
     </p>
@@ -76,8 +76,8 @@ function renderRoute(main) {
         const sc = scores.find((s) => s.route.id === r.id);
         return `
         <article class="route-card ${locked === r.id ? 'locked' : ''}" style="${locked && locked !== r.id ? 'opacity:.45' : ''}">
-          ${reveal ? `<span class="rank-badge">#${rankOf[r.id]} · ${sc.points} pts</span>` : ''}
-          <div class="num">${r.order}</div>
+          ${reveal ? `<span class="rank-badge">Group #${rankOf[r.id]} · ${sc.points} pts</span>` : ''}
+          <div class="num"><small>Option</small>${r.order}</div>
           <h3>${esc(r.name)}</h3>
           <p class="tag">${esc(r.tagline)}</p>
           ${reveal ? `<div class="score-bar"><i style="width:${(sc.points / max) * 100}%"></i></div><div class="tiny muted">${sc.firsts} first-place vote${sc.firsts === 1 ? '' : 's'}</div>` : ''}
@@ -120,7 +120,8 @@ function renderBases(main) {
   }
   $('#base-tabs').innerHTML = w.cities.map((c, i) => `<button class="base-tab ${i === w.bi ? 'active' : ''}" data-base="${i}">${esc(CITIES[c])} · ${cardsFor(c).length} ideas</button>`).join('');
   $$('[data-base]').forEach((b) => (b.onclick = () => setSession({ baseIndex: +b.dataset.base, cardIndex: 0 })));
-  $('#base-count').textContent = w.card ? `Idea ${w.ci + 1} of ${w.list.length} in ${CITIES[w.city]}` : '';
+  $('#base-count').innerHTML = w.card ? `Idea ${w.ci + 1} of ${w.list.length} in ${esc(CITIES[w.city])}
+    <span class="legend"><i class="dot-must"></i>Must do <i class="dot-if"></i>If time <i class="dot-skip"></i>Skip <i class="dot-split"></i>Split <i class="dot-none"></i>Not revealed</span>` : '';
 
   const card = w.card;
   if (!card) {
@@ -160,6 +161,8 @@ function renderBases(main) {
       ${reveal ? `<span class="tier tier-${tier}">${TIER_LABEL[tier]}${card.decision ? ' (decided)' : ''}</span>` : ''}</div>
     <h2>${esc(card.title)}</h2>
     <p class="pitch">${esc(card.pitch || '')}</p>
+    ${card.highlights?.length ? `<div class="highlights"><b>Don’t miss</b><ul>${card.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : wikiBlurb(card)}
+    ${card.tip ? `<p class="tip">💡 ${esc(card.tip)}</p>` : ''}
     <div class="facts">
       <div class="fact"><b>Time</b>${esc(card.time || '—')}</div>
       <div class="fact"><b>Cost</b>${esc(card.cost || '—')}</div>
@@ -178,7 +181,7 @@ function renderBases(main) {
           <div class="t-must">${cnt.must} Must do<small>${esc(namesFor('must'))}</small></div>
           <div class="t-if">${cnt.if} If time<small>${esc(namesFor('if'))}</small></div>
           <div class="t-skip">${cnt.skip} Skip<small>${esc(namesFor('skip'))}</small></div>
-        </div>` : `<p class="muted" style="margin:.8em 0 0;font-size:.85em">Results show when everyone has voted.</p>`}
+        </div>` : `<p class="muted" style="margin:.5em 0 0;font-size:.8em">Results show when everyone has voted.</p>`}
     </div>`;
   $('#reveal-card') && ($('#reveal-card').onclick = revealCurrent);
 
@@ -189,6 +192,11 @@ function renderBases(main) {
   $$('[data-card]').forEach((el) => (el.onclick = () => setSession({ cardIndex: +el.dataset.card })));
   const active = $('.film.active');
   active && active.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+function wikiBlurb(card) {
+  const w = cardWiki(card);
+  return w ? `<p class="wiki-blurb">${esc(w.extract)}</p>` : '';
 }
 
 function togglePlay() {

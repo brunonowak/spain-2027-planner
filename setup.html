@@ -6,12 +6,12 @@
   <title>Spain 2027 · Setup</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇪🇸</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=579944">
+  <link rel="stylesheet" href="css/styles.css?v=580274">
 </head>
 <body>
   <div id="app"></div>
   <script type="module">
-    import { boot, state, onState, esc, $, $$, seedStarter, store, isDemo } from './js/common.js?v=579944';
+    import { boot, state, onState, esc, $, $$, seedStarter, store, isDemo } from './js/common.js?v=580274';
     const root = document.getElementById('app');
     await boot(root, { surface: 'setup' });
     root.innerHTML = `<div class="plain-page">
@@ -39,6 +39,8 @@
         <p class="muted" style="margin-top:0">Idea cards, comments, notes and the parking lot are kept either way.</p>
         <p><button class="btn" id="reset-route">Reset the route vote</button><br><span class="tiny muted">Clears everyone’s rankings, unlocks the route and sends the TV back to step 1.</span></p>
         <p><button class="btn btn-danger" id="reset-votes">Reset all idea votes</button><br><span class="tiny muted">Also clears every Must do / If time / Skip vote, the decisions on splits, and which day each idea is on.</span></p>
+        <p><button class="btn btn-primary" id="reset-all">Fresh start (for Friday)</button><br><span class="tiny muted">Wipes all test activity: rankings, votes, decisions, day plans and notes, comments, parking lot and change history. Keeps the routes, the starter ideas, the guest list and the flights.</span><br>
+          <label class="toggle" style="margin-top:6px"><input type="checkbox" id="rm-added"> Also delete ideas people added (keeps only the starter ideas)</label></p>
         <span id="reset-msg" class="muted"></span>
       </div>
       <p class="tiny muted">Signed in as ${esc(state.me.email)}${isDemo ? ' (demo)' : ''}</p>
@@ -76,6 +78,21 @@
         for (const c of state.cards) await store.updateDoc('cards/' + c.id, { votes: {}, decision: store.deleteField(), day: store.deleteField() });
         $('#reset-msg').textContent = '✓ Everything reset';
       } catch (e) { fail(e); }
+    };
+    $('#reset-all').onclick = async () => {
+      const rmAdded = $('#rm-added').checked;
+      if (!confirm('Wipe all test activity' + (rmAdded ? ' and delete added ideas' : '') + '? This can’t be undone.')) return;
+      $('#reset-msg').textContent = 'Resetting…';
+      try {
+        await resetRoute();
+        for (const c of state.cards) {
+          if (rmAdded && c.createdBy !== 'Starter') { await store.deleteDoc('cards/' + c.id); continue; }
+          for (const m of await store.getCol(`cards/${c.id}/comments`)) await store.deleteDoc(`cards/${c.id}/comments/${m.id}`);
+          await store.updateDoc('cards/' + c.id, { votes: {}, decision: store.deleteField(), day: store.deleteField() });
+        }
+        for (const col of ['parking', 'days', 'history']) for (const d of await store.getCol(col)) await store.deleteDoc(`${col}/${d.id}`);
+        $('#reset-msg').textContent = '✓ Fresh start — ready for Friday';
+      } catch (e) { $('#reset-msg').textContent = ''; fail(e); }
     };
     $('#flights-file').onchange = async (e) => {
       const file = e.target.files[0]; if (!file) return;

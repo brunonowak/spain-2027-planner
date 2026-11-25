@@ -111,18 +111,19 @@ body.tv { overflow: hidden; }
 .stage-media .img-fallback span { font-size: 8em; }
 .play-btn { position: absolute; left: 1.2em; bottom: 1.2em; z-index: 2; font-size: 1em; background: rgba(0,0,0,.65); backdrop-filter: blur(6px); border-color: rgba(255,255,255,.25); }
 .media-credit { position: absolute; right: .8em; bottom: .6em; font-size: .6em; color: rgba(255,255,255,.7); z-index: 2; }
-.stage-info { display: flex; flex-direction: column; gap: .9em; min-height: 0; overflow: hidden; }
+.stage-info { display: flex; flex-direction: column; gap: .7em; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.stage-info > * { flex-shrink: 0; }
 .stage-info .kicker { display: flex; gap: .5em; align-items: center; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; font-size: .78em; }
-.stage-info h2 { font-family: var(--display); font-size: 3em; line-height: 1.02; margin: 0; font-weight: 600; }
-.stage-info .pitch { font-size: 1.3em; line-height: 1.4; margin: 0; }
+.stage-info h2 { font-family: var(--display); font-size: 2.4em; line-height: 1.02; margin: 0; font-weight: 600; }
+.stage-info .pitch { font-size: 1.1em; line-height: 1.4; margin: 0; }
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7em; }
-.fact { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .65em .8em; }
+.fact { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .45em .7em; font-size: .9em; }
 .fact b { display: block; font-size: .7em; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .2em; }
-.vote-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1em 1.1em; margin-top: auto; }
-.vote-panel h4 { margin: 0 0 .7em; font-size: .85em; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; display: flex; justify-content: space-between; align-items: center; }
+.vote-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .8em 1em; margin-top: auto; }
+.vote-panel h4 { margin: 0 0 .5em; font-size: .85em; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; display: flex; justify-content: space-between; align-items: center; }
 .vote-row { display: flex; gap: 1.2em; align-items: center; flex-wrap: wrap; }
 .voter { display: flex; flex-direction: column; align-items: center; gap: .3em; font-size: .8em; color: var(--muted); }
-.voter .avatar { width: 2.6em; height: 2.6em; font-size: 1em; }
+.voter .avatar { width: 2.1em; height: 2.1em; font-size: .9em; }
 .tally { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6em; margin-top: .9em; }
 .tally div { border-radius: 12px; padding: .5em .7em; font-weight: 700; }
 .tally .t-must { background: color-mix(in srgb, var(--must) 22%, transparent); }
@@ -275,3 +276,14 @@ table.flights th { color: var(--muted); font-weight: 600; font-size: 11px; text-
 .landing-links a span { font-size: 34px; }
 @media (max-width: 560px) { .landing-links { grid-template-columns: 1fr; } }
 
+
+.route-card .num small { display: block; font-family: var(--body); font-size: .28em; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: .15em; }
+.highlights { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .5em .9em; font-size: .92em; }
+.highlights b { font-size: .7em; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.highlights ul { margin: .3em 0 0; padding-left: 1.1em; line-height: 1.45; }
+.tip { margin: 0; color: var(--accent-2); font-size: .85em; }
+.wiki-blurb { margin: 0; color: var(--muted); font-size: .9em; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.legend { display: inline-flex; align-items: center; gap: .4em; margin-left: 1.2em; font-size: .8em; }
+.legend i { width: .75em; height: .75em; border-radius: 50%; display: inline-block; margin-left: .5em; }
+.legend i.dot-none { border: 1px solid var(--muted); }
+.ph-list { margin: 6px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.5; }

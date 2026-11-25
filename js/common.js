@@ -1,8 +1,8 @@
 // Shared state, helpers and actions for the TV and phone sites.
-import * as S from './store.js?v=579944';
-import { ROUTES, CARDS, TRIP_START } from './seed.js?v=579944';
+import * as S from './store.js?v=580274';
+import { ROUTES, CARDS, DETAILS, TRIP_START } from './seed.js?v=580274';
 
-export { isDemo } from './store.js?v=579944';
+export { isDemo } from './store.js?v=580274';
 
 export const STEPS = [
   { id: 'route', label: 'Pick the route' },
@@ -106,33 +106,37 @@ function toSeconds(t) {
 export const youtubeSearch = (card) => `https://www.youtube.com/results?search_query=${encodeURIComponent(`${card.title} ${CITIES[card.city] || ''} Spain travel`)}`;
 
 const imgCache = new Map(); // wiki title -> { src, small } | null
-try { Object.entries(JSON.parse(sessionStorage.getItem('wikiImg3') || '{}')).forEach(([k, v]) => imgCache.set(k, v)); } catch {}
+try { Object.entries(JSON.parse(sessionStorage.getItem('wikiImg4') || '{}')).forEach(([k, v]) => imgCache.set(k, v)); } catch {}
 let onImage = () => {};
 export const setImageListener = (fn) => { onImage = fn; };
-/** Image for a card: its own photo link, or a Wikipedia photo fetched once and cached. */
-function cardImageInfo(card) {
-  if (card.image) return { src: card.image, small: null };
-  if (!card.wiki) return null;
-  if (imgCache.has(card.wiki)) return imgCache.get(card.wiki);
-  imgCache.set(card.wiki, null);
-  fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(card.wiki)}`)
+/** Wikipedia photo + intro for an article title, fetched once and cached. */
+function wikiInfo(title) {
+  if (!title) return null;
+  if (imgCache.has(title)) return imgCache.get(title);
+  imgCache.set(title, null);
+  fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`)
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => {
-      const thumb = j?.thumbnail?.source;
-      if (!thumb) return;
+      if (!j) return;
+      const thumb = j.thumbnail?.source || null;
       // Wikimedia serves resized copies only at sizes up to the original width; use a standard
       // large size when the original is big enough, and keep the API's own thumbnail as a fallback.
-      const ow = j?.originalimage?.width || 0;
+      const ow = j.originalimage?.width || 0;
       const size = ow >= 1280 ? 1280 : ow >= 960 ? 960 : 0;
-      const src = size && /\/\d+px-/.test(thumb) ? thumb.replace(/\/\d+px-/, `/${size}px-`) : thumb;
-      imgCache.set(card.wiki, { src, small: thumb });
-      try { sessionStorage.setItem('wikiImg3', JSON.stringify(Object.fromEntries(imgCache))); } catch {}
+      const src = thumb && size && /\/\d+px-/.test(thumb) ? thumb.replace(/\/\d+px-/, `/${size}px-`) : thumb;
+      imgCache.set(title, { src, small: thumb, extract: j.extract || '', url: j.content_urls?.desktop?.page || '' });
+      try { sessionStorage.setItem('wikiImg4', JSON.stringify(Object.fromEntries(imgCache))); } catch {}
       onImage();
     })
     .catch(() => {});
   return null;
 }
+function cardImageInfo(card) {
+  return card.image ? { src: card.image, small: null } : wikiInfo(card.wiki);
+}
 export const cardImage = (card) => cardImageInfo(card)?.src || null;
+/** Wikipedia intro paragraph + link for a card (fetched with the photo). */
+export function cardWiki(card) { const i = wikiInfo(card.wiki); return i?.extract ? { extract: i.extract, url: i.url } : null; }
 
 // If a photo fails to load, try the small Wikipedia thumbnail, then fall back to the icon tile.
 window.__imgFail = (img) => {
@@ -403,9 +407,14 @@ export async function seedStarter() {
     if (!(await S.getDoc('routes/' + r.id))) { const { id, ...rest } = r; await S.setDoc('routes/' + id, rest); added++; }
   }
   for (const [i, c] of CARDS.entries()) {
-    if (!(await S.getDoc('cards/' + c.id))) {
+    const [highlights, tip] = DETAILS[c.id] || [[], ''];
+    const existing = await S.getDoc('cards/' + c.id);
+    if (!existing) {
       const { id, ...rest } = c;
-      await S.setDoc('cards/' + id, { ...rest, order: i, votes: {}, createdAt: now() + i, createdBy: 'Starter' });
+      await S.setDoc('cards/' + id, { ...rest, highlights, tip, order: i, votes: {}, createdAt: now() + i, createdBy: 'Starter' });
+      added++;
+    } else if (!existing.highlights && highlights.length) {
+      await S.updateDoc('cards/' + c.id, { highlights, tip: existing.tip || tip }); // add details without touching edits or votes
       added++;
     }
   }
@@ -419,7 +428,7 @@ async function seedDemo() {
     await S.setDoc('members/' + email, { name: n });
     await S.setDoc('people/demo-' + n.toLowerCase(), { uid: 'demo-' + n.toLowerCase(), email, name: n });
   }
-  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=579944');
+  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=580274');
   await S.setDoc('meta/flights', DEMO_FLIGHTS);
 }
 export { S as store };

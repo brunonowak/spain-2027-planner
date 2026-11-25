@@ -3,8 +3,8 @@ import {
   lockedRoute, route, card, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep,
   voters, voteCounts, autoTier, tierOf, vote, saveCard, addCard, deleteCard, decide, scheduleCard, undo,
   setRanking, lockRoute, routeScores, planCards, addIdea, deleteIdea, setDayNote, addComment, watchComments,
-  imageHtml, parseVideo, youtubeSearch, sortedCards, signOut, isDemo, revealed,
-} from './common.js?v=579944';
+  imageHtml, cardWiki, parseVideo, youtubeSearch, sortedCards, signOut, isDemo, revealed,
+} from './common.js?v=580274';
 
 const root = document.getElementById('app');
 const ui = {
@@ -157,6 +157,8 @@ function nowBases() {
       <div class="tiny muted">${CATS[c.cat]?.icon || ''} ${esc(CATS[c.cat]?.label || '')}</div>
       <h2 data-open="${c.id}">${esc(c.title)}</h2>
       <p style="margin:0">${esc(c.pitch || '')}</p>
+      ${c.highlights?.length ? `<ul class="ph-list">${c.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
+      <div class="facts-sm">${c.time ? `<span class="chip">⏱ ${esc(c.time)}</span>` : ''}${c.cost ? `<span class="chip">💶 ${esc(c.cost)}</span>` : ''}${c.booking ? `<span class="chip">🎟 ${esc(c.booking)}</span>` : ''}</div>
       ${voteButtons(c)}
       <p class="tiny muted" style="margin:10px 0 0">${votedN} of ${vs.length} have voted · <a href="#" data-open="${c.id}">details, video &amp; comments</a></p>
     </div>`;
@@ -324,6 +326,9 @@ function openCard(id, tries = 0) {
     <div class="tiny muted">${CATS[c.cat]?.icon || ''} ${esc(CATS[c.cat]?.label || '')} · ${esc(CITIES[c.city])}</div>
     <h2>${esc(c.title)}</h2>
     <p style="margin:0">${esc(c.pitch || '')}</p>
+    ${c.highlights?.length ? `<div class="ph-section-title" style="margin-top:12px">Don’t miss</div><ul class="ph-list">${c.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
+    ${c.tip ? `<p style="margin:10px 0 0;color:var(--accent-2);font-size:14px">💡 ${esc(c.tip)}</p>` : ''}
+    <div id="wiki"></div>
     <div class="facts-sm">
       ${c.time ? `<span class="chip">⏱ ${esc(c.time)}</span>` : ''}${c.cost ? `<span class="chip">💶 ${esc(c.cost)}</span>` : ''}${c.booking ? `<span class="chip">🎟 ${esc(c.booking)}</span>` : ''}
     </div>
@@ -339,6 +344,7 @@ function openCard(id, tries = 0) {
     }));
   ui.sheet = { type: 'card', id };
   refreshSheet();
+  if (c.link) $('#wiki').insertAdjacentHTML('afterend', `<p style="margin:8px 0 0"><a href="${esc(c.link)}" target="_blank" rel="noopener">More info ↗</a></p>`);
   $('#close').onclick = closeSheet;
   $('#edit').onclick = () => openEdit(id);
   $('#del').onclick = async () => { if (confirm(`Delete “${c.title}”? You can undo it from the Trip tab.`)) { await deleteCard(id); closeSheet(); toast('Deleted'); } };
@@ -359,6 +365,12 @@ function refreshSheet() {
     <p class="tiny muted" style="margin:10px 0 0">${n.n} of ${vs.length} voted · ${revealed(c) ? `<span class="tier tier-${t}">${TIER_LABEL[t]}${c.decision ? ' (decided)' : ''}</span>` : 'results show once everyone votes'}
       ${c.decision ? `<a href="#" id="reopen">re-open</a>` : ''}</p>`;
   bindVotes(el);
+  const w = cardWiki(c), wikiEl = $('#wiki');
+  if (wikiEl && w && !wikiEl.dataset.done) {
+    wikiEl.dataset.done = '1';
+    wikiEl.innerHTML = `<div class="ph-section-title" style="margin-top:14px">About</div><p style="margin:0;font-size:14px;color:var(--muted);line-height:1.5">${esc(w.extract)}</p>
+      ${w.url ? `<p class="tiny" style="margin:6px 0 0"><a href="${esc(w.url)}" target="_blank" rel="noopener">Read more on Wikipedia ↗</a></p>` : ''}`;
+  }
   $('#reopen') && ($('#reopen').onclick = (e) => { e.preventDefault(); decide(c.id, null); });
 }
 
@@ -374,6 +386,8 @@ function openEdit(id, preset = {}) {
         <label class="field">Type<select name="cat">${opt(CATS, c.cat)}</select></label>
       </div>
       <label class="field">Two-line pitch<textarea name="pitch" placeholder="Why it’s worth it">${esc(c.pitch || '')}</textarea></label>
+      <label class="field">Don’t miss (one per line)<textarea name="highlights" placeholder="The best bits, one per line">${esc((c.highlights || []).join('\n'))}</textarea></label>
+      <label class="field">Tip<input name="tip" value="${esc(c.tip || '')}" placeholder="Practical advice"></label>
       <label class="field">Video link (YouTube, ideally under 3 min)<input name="video" type="url" inputmode="url" value="${esc(c.video || '')}" placeholder="https://youtu.be/…"></label>
       <label class="field">Start the video at (optional, e.g. 1m20s)<input name="start" value="${esc(c.start || '')}"></label>
       <label class="field">Photo link (optional)<input name="image" type="url" inputmode="url" value="${esc(c.image || '')}" placeholder="Paste an image address"></label>
@@ -390,6 +404,7 @@ function openEdit(id, preset = {}) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target).entries());
     Object.keys(data).forEach((k) => (data[k] = data[k].trim()));
+    data.highlights = data.highlights ? data.highlights.split('\n').map((x) => x.trim()).filter(Boolean) : [];
     if (id) { await saveCard(id, data); toast('Saved'); openCard(id); }
     else { const newId = await addCard(data); toast('Idea added'); openCard(newId); }
   };

@@ -2,7 +2,7 @@
 //  - Firebase (Firestore + Auth) for the real thing
 //  - Demo (localStorage + BroadcastChannel) when the URL has ?demo — lets TV and phone
 //    tabs in the same browser sync, so the flow can be tried without touching real data.
-import { firebaseConfig } from './firebase-config.js?v=579944';
+import { firebaseConfig } from './firebase-config.js?v=580274';
 
 const SDK = 'https://www.gstatic.com/firebasejs/13.4.0/';
 const params = new URLSearchParams(location.search);
