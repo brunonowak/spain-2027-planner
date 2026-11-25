@@ -3,13 +3,13 @@ import {
   lockedRoute, route, card, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep,
   voters, voteCounts, autoTier, tierOf, vote, saveCard, addCard, deleteCard, decide, scheduleCard, undo,
   setRanking, lockRoute, routeScores, planCards, addIdea, deleteIdea, setDayNote, addComment, watchComments,
-  imageHtml, cardWiki, parseVideo, youtubeSearch, sortedCards, signOut, isDemo, revealed,
-} from './common.js?v=580565';
+  imageHtml, cardWiki, parseVideo, GROUPS, SLOTS, groupOf, factLabels, mapsLink, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, signOut, isDemo, revealed,
+} from './common.js?v=581539';
 
 const root = document.getElementById('app');
 const ui = {
   tab: sessionStorage.getItem('tab') || 'now',
-  city: 'all', onlyUnvoted: false, includeIf: false,
+  city: 'all', group: 'all', onlyUnvoted: false, includeIf: false,
   rankDraft: null, sheet: null, pending: false,
 };
 
@@ -53,7 +53,7 @@ function renderMain(force) {
   $('.fab')?.remove();
   if (ui.tab === 'cards') {
     document.body.insertAdjacentHTML('beforeend', `<button class="btn btn-primary fab" id="fab">＋ Add idea</button>`);
-    $('#fab').onclick = () => openEdit(null, { city: ui.city !== 'all' ? ui.city : '' });
+    $('#fab').onclick = () => openEdit(null, { city: ui.city !== 'all' ? ui.city : '', cat: ui.group !== 'all' ? GROUPS.find((g) => g.id === ui.group).cats[0] : 'sight' });
   }
 }
 
@@ -94,6 +94,7 @@ function viewNow(main) {
   bindPlan(main);
   $$('[data-open]', main).forEach((el) => (el.onclick = () => openCard(el.dataset.open)));
   $$('[data-decide]', main).forEach((b) => (b.onclick = () => decide(b.dataset.id, b.dataset.decide)));
+  $$('[data-pick]', main).forEach((b) => (b.onclick = () => { const c = card(b.dataset.pick); chooseHotel(c.city, c.id); }));
 }
 
 function nowRoute() {
@@ -152,7 +153,7 @@ function nowBases() {
   const votedN = vs.filter((v) => v.uid && c.votes?.[v.uid]).length;
   return `
     <div class="ph-card">
-      <div class="tiny muted" style="margin-bottom:8px">${esc(CITIES[w.city])} · idea ${w.ci + 1} of ${w.list.length}</div>
+      <div class="tiny muted" style="margin-bottom:8px">${esc(CITIES[w.city])} · ${w.group?.icon || ''} ${esc(w.group?.label || '')} ${w.ci + 1} of ${w.list.length}</div>
       <div class="ph-hero" data-open="${c.id}">${imageHtml(c)}</div>
       <div class="tiny muted">${CATS[c.cat]?.icon || ''} ${esc(CATS[c.cat]?.label || '')}</div>
       <h2 data-open="${c.id}">${esc(c.title)}</h2>
@@ -160,6 +161,7 @@ function nowBases() {
       ${c.highlights?.length ? `<ul class="ph-list">${c.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
       <div class="facts-sm">${c.time ? `<span class="chip">⏱ ${esc(c.time)}</span>` : ''}${c.cost ? `<span class="chip">💶 ${esc(c.cost)}</span>` : ''}${c.booking ? `<span class="chip">🎟 ${esc(c.booking)}</span>` : ''}</div>
       ${voteButtons(c)}
+      ${c.cat === 'hotel' ? `<div style="margin-top:10px">${chosenHotel(c.city)?.id === c.id ? '<span class="tier tier-must">✓ Our hotel</span>' : `<button class="btn" data-pick="${c.id}" style="width:100%">Pick this hotel for ${esc(CITIES[c.city])}</button>`}</div>` : ''}
       <p class="tiny muted" style="margin:10px 0 0">${votedN} of ${vs.length} have voted · <a href="#" data-open="${c.id}">details, video &amp; comments</a></p>
     </div>`;
 }
@@ -188,6 +190,8 @@ function viewCards(main) {
   const cities = r ? routeCities(r) : Object.keys(CITIES);
   if (ui.city !== 'all' && !cities.includes(ui.city)) ui.city = 'all';
   let list = sortedCards(state.cards.filter((c) => (ui.city === 'all' ? cities.includes(c.city) : c.city === ui.city)));
+  const inCity = list;
+  if (ui.group !== 'all') list = list.filter((c) => groupOf(c) === ui.group);
   const unvoted = list.filter((c) => !myVote(c)).length;
   if (ui.onlyUnvoted) list = list.filter((c) => !myVote(c));
   main.innerHTML = `
@@ -195,15 +199,20 @@ function viewCards(main) {
       <button class="chip ${ui.city === 'all' ? 'sel' : ''}" data-city="all">All${r ? ' on route' : ''}</button>
       ${cities.map((c) => `<button class="chip ${ui.city === c ? 'sel' : ''}" data-city="${c}">${esc(CITIES[c])} · ${cardsFor(c).length} ideas</button>`).join('')}
     </div>
+    <div class="chips-scroll">
+      <button class="chip ${ui.group === 'all' ? 'sel' : ''}" data-group="all">Everything</button>
+      ${GROUPS.map((g) => `<button class="chip ${ui.group === g.id ? 'sel' : ''}" data-group="${g.id}">${g.icon} ${g.label} · ${inCity.filter((c) => groupOf(c) === g.id).length}</button>`).join('')}
+    </div>
     <label class="toggle" style="margin-bottom:12px"><input type="checkbox" id="unv" ${ui.onlyUnvoted ? 'checked' : ''}> Only ideas I haven’t voted on (${unvoted})</label>
     ${list.length ? list.map((c) => `
       <div class="card-row" data-open="${c.id}">
         ${imageHtml(c)}
         <div><h4>${esc(c.title)}</h4>
-          <div class="meta">${CATS[c.cat]?.icon || ''} ${esc(CITIES[c.city])} ${myVoteTag(c)} ${revealed(c) ? `<span class="tier tier-${tierOf(c)}">${TIER_LABEL[tierOf(c)]}</span>` : ''}</div></div>
+          <div class="meta">${CATS[c.cat]?.icon || ''} ${esc(CITIES[c.city])} ${chosenHotel(c.city)?.id === c.id ? '<span class="tier tier-must">Our hotel</span>' : ''} ${myVoteTag(c)} ${revealed(c) ? `<span class="tier tier-${tierOf(c)}">${TIER_LABEL[tierOf(c)]}</span>` : ''}</div></div>
       </div>`).join('') : `<p class="muted">Nothing here yet — add the first idea.</p>`}
     <div style="height:70px"></div>`;
   $$('[data-city]', main).forEach((b) => (b.onclick = () => { ui.city = b.dataset.city; renderMain(true); }));
+  $$('[data-group]', main).forEach((b) => (b.onclick = () => { ui.group = b.dataset.group; renderMain(true); }));
   $('#unv').onchange = (e) => { ui.onlyUnvoted = e.target.checked; renderMain(true); };
   $$('[data-open]', main).forEach((el) => (el.onclick = () => openCard(el.dataset.open)));
 }
@@ -218,27 +227,37 @@ function planHtml() {
   if (!r) return `<div class="ph-card"><h2>No route yet</h2><p class="muted" style="margin:0">Once the group locks a route, the day-by-day plan appears here.</p></div>`;
   const nights = routeNights(r);
   const items = planCards(ui.includeIf);
+  const travel = travelFor(r);
   const notes = Object.fromEntries(state.days.map((d) => [d.id, d.note || '']));
   const unscheduled = items.filter((c) => !c.day || !nights.some((n) => n.date === c.day));
+  const order = Object.fromEntries(SLOTS.map((x, i) => [x.id, i]));
+  const slotOf = (id) => SLOTS.find((x) => x.id === id) || SLOTS[0];
+  const dayList = (date) => [
+    ...travel.filter((t) => t.date === date).map((t) => ({ slot: t.slot, html: `<li class="travel-li"><span>${esc(t.title)}<small class="muted"> ${esc([t.time, t.cost].filter(Boolean).join(' · '))}</small>${t.note ? `<br><small class="muted">${esc(t.note)}</small>` : ''}</span></li>` })),
+    ...items.filter((c) => c.day === date).map((c) => { const sl = slotOf(c.slot || defaultSlot(c)); return { slot: sl.id, html: `<li><small class="slot">${sl.icon} ${sl.label}</small><span data-open="${c.id}">${esc(c.title)}</span><button data-unsched="${c.id}" aria-label="Remove">×</button></li>` }; }),
+  ].sort((x, y) => order[x.slot] - order[y.slot]).map((e) => e.html).join('');
+  const lastDay = addDays(nights[nights.length - 1].date, 1);
   return `
     <div class="ph-card"><h2 style="margin:0">${esc(r.name)}</h2>
       <label class="toggle" style="margin-top:8px"><input type="checkbox" id="incl-if" ${ui.includeIf ? 'checked' : ''}> Include “If time” ideas</label></div>
     ${unscheduled.length ? `<div class="ph-card"><h3>To place (${unscheduled.length})</h3>
       ${unscheduled.map((c) => `<div class="u-item-ph"><span class="grow" data-open="${c.id}">${CATS[c.cat]?.icon || ''} ${esc(c.title)} <span class="tiny muted">${esc(CITIES[c.city])}</span></span>
-        <select data-sched="${c.id}"><option value="">Put on…</option>${nights.filter((n) => n.city === c.city).map((n) => `<option value="${n.date}">${fmtDate(n.date)}</option>`).join('')}</select></div>`).join('')}</div>` : ''}
+        <select data-sched="${c.id}"><option value="">Put on…</option>${nights.filter((n) => n.city === c.city).map((n) => `<optgroup label="${fmtDate(n.date)}">${SLOTS.map((x) => `<option value="${n.date}|${x.id}">${fmtDate(n.date, { month: 'short', day: 'numeric' })} · ${x.label}</option>`).join('')}</optgroup>`).join('')}</select></div>`).join('')}</div>` : ''}
     ${nights.map((n, i) => {
-      const day = items.filter((c) => c.day === n.date);
+      const hotel = chosenHotel(n.city);
+      const list = dayList(n.date);
       return `<div class="plan-day">
         <header><b>Day ${i + 1} · ${fmtDate(n.date)}</b><span class="city city-${n.city}">${esc(CITIES[n.city])}</span></header>
-        ${day.length ? `<ul>${day.map((c) => `<li><span data-open="${c.id}">${CATS[c.cat]?.icon || ''} ${esc(c.title)}</span><button data-unsched="${c.id}" aria-label="Remove">×</button></li>`).join('')}</ul>` : ''}
+        <div class="tiny muted" style="margin-top:4px">🛏️ ${hotel ? `<a href="#" data-open="${hotel.id}">${esc(hotel.title)}</a>` : 'Hotel not picked yet'}</div>
+        ${list ? `<ul>${list}</ul>` : ''}
         <input class="input note-input" data-note="${n.date}" placeholder="Add a note for this day…" value="${esc(notes[n.date] || '')}">
       </div>`;
     }).join('')}
-    <div class="plan-day"><header><b>${fmtDate(addDays(nights[nights.length - 1].date, 1))}</b><span class="city city-madrid">Fly home</span></header></div>`;
+    <div class="plan-day"><header><b>${fmtDate(lastDay)}</b><span class="city city-madrid">Fly home</span></header><ul>${dayList(lastDay)}</ul></div>`;
 }
 function bindPlan(main) {
   $('#incl-if', main) && ($('#incl-if', main).onchange = (e) => { ui.includeIf = e.target.checked; renderMain(true); });
-  $$('[data-sched]', main).forEach((s) => (s.onchange = () => s.value && scheduleCard(s.dataset.sched, s.value)));
+  $$('[data-sched]', main).forEach((s) => (s.onchange = () => { if (!s.value) return; const [d, sl] = s.value.split('|'); scheduleCard(s.dataset.sched, d, sl); }));
   $$('[data-unsched]', main).forEach((b) => (b.onclick = () => scheduleCard(b.dataset.unsched, null)));
   $$('[data-note]', main).forEach((inp) => (inp.onchange = () => setDayNote(inp.dataset.note, inp.value.trim())));
   if (ui.tab === 'plan') $$('[data-open]', main).forEach((el) => (el.onclick = () => openCard(el.dataset.open)));
@@ -329,10 +348,11 @@ function openCard(id, tries = 0) {
     ${c.highlights?.length ? `<div class="ph-section-title" style="margin-top:12px">Don’t miss</div><ul class="ph-list">${c.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
     ${c.tip ? `<p style="margin:10px 0 0;color:var(--accent-2);font-size:14px">💡 ${esc(c.tip)}</p>` : ''}
     <div id="wiki"></div>
-    <div class="facts-sm">
-      ${c.time ? `<span class="chip">⏱ ${esc(c.time)}</span>` : ''}${c.booking ? `<span class="chip">🎟 ${esc(c.booking)}</span>` : ''}
+    <table class="flights facts-table">${factLabels(c).map((l, i) => { const v = [c.time, c.cost, c.booking][i]; return v ? `<tr><th>${l}</th><td>${esc(v)}${i === 1 && c.costSource ? ` · <a href="${esc(c.costSource)}" target="_blank" rel="noopener">source ↗</a>` : ''}</td></tr>` : ''; }).join('')}</table>
+    <div class="sheet-actions" style="margin-top:8px">
+      <a class="btn" href="${esc(mapsLink(c))}" target="_blank" rel="noopener">📍 Google Maps</a>
+      ${c.cat === 'hotel' ? (chosenHotel(c.city)?.id === c.id ? `<button class="btn" id="unpick">✓ Our hotel · clear</button>` : `<button class="btn btn-primary" id="pick">Pick for ${esc(CITIES[c.city])}</button>`) : ''}
     </div>
-    ${c.cost ? `<p style="margin:4px 0 10px;font-size:14px">💶 <b>Per person:</b> ${esc(c.cost)}${c.costSource ? ` · <a href="${esc(c.costSource)}" target="_blank" rel="noopener">price source ↗</a>` : ''}</p>` : ''}
     ${vid ? `<a class="btn" href="${esc(vid.url)}" target="_blank" rel="noopener">▶ Watch video</a>` : `<a class="btn" href="${esc(youtubeSearch(c))}" target="_blank" rel="noopener">🔎 Find a short video</a>`}
     <div id="sheet-votes"></div>
     <div class="sheet-actions"><button class="btn" id="edit">✏️ Edit</button><button class="btn btn-danger" id="del">Delete</button><button class="btn btn-ghost" id="close">Close</button></div>
@@ -345,7 +365,9 @@ function openCard(id, tries = 0) {
     }));
   ui.sheet = { type: 'card', id };
   refreshSheet();
-  if (c.link) $('#wiki').insertAdjacentHTML('afterend', `<p style="margin:8px 0 0"><a href="${esc(c.link)}" target="_blank" rel="noopener">More info ↗</a></p>`);
+  if (c.link && !/google\.com\/maps/.test(c.link)) $('#wiki').insertAdjacentHTML('afterend', `<p style="margin:8px 0 0"><a href="${esc(c.link)}" target="_blank" rel="noopener">More info ↗</a></p>`);
+  $('#pick') && ($('#pick').onclick = async () => { await chooseHotel(c.city, c.id); toast('Hotel picked'); openCard(id); });
+  $('#unpick') && ($('#unpick').onclick = async () => { await chooseHotel(c.city, null); openCard(id); });
   $('#close').onclick = closeSheet;
   $('#edit').onclick = () => openEdit(id);
   $('#del').onclick = async () => { if (confirm(`Delete “${c.title}”? You can undo it from the Trip tab.`)) { await deleteCard(id); closeSheet(); toast('Deleted'); } };

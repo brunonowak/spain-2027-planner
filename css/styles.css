@@ -141,7 +141,7 @@ body.tv { overflow: hidden; }
 .base-tabs { display: flex; gap: .5em; }
 .base-tab { padding: .35em .9em; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-weight: 600; font-size: .85em; cursor: pointer; }
 .base-tab.active { background: var(--accent-2); border-color: var(--accent-2); color: #2a1d05; }
-.bases-layout { display: grid; grid-template-rows: auto 1fr auto; gap: 1.4vh; height: 100%; min-height: 0; }
+.bases-layout { display: grid; grid-template-rows: auto auto 1fr auto; gap: 1.4vh; height: 100%; min-height: 0; }
 
 /* splits */
 .splits-layout { display: grid; grid-template-columns: 1fr 1.1fr; gap: 2vw; height: calc(100% - 6.5em); min-height: 0; }
@@ -287,3 +287,19 @@ table.flights th { color: var(--muted); font-weight: 600; font-size: 11px; text-
 .legend i { width: .75em; height: .75em; border-radius: 50%; display: inline-block; margin-left: .5em; }
 .legend i.dot-none { border: 1px solid var(--muted); }
 .ph-list { margin: 6px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.5; }
+
+.group-tabs { align-items: center; flex-wrap: wrap; }
+.base-tab.sub { background: transparent; }
+.base-tab.sub.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hotel-pill { margin-left: auto; font-size: .85em; color: var(--muted); }
+.hotel-pill b { color: var(--text); }
+.hotel-pick { display: flex; gap: .6em; align-items: center; }
+.hotel-line { font-size: .62em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.travel-item { background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); flex-direction: column; align-items: flex-start; gap: 0; }
+.travel-item small { font-weight: 500; color: var(--muted); }
+.days-grid { overflow-y: auto; }
+.day { overflow-y: auto; scrollbar-width: none; }
+
+.facts-table th { width: 38%; }
+.plan-day li .slot { color: var(--muted); font-size: 11px; min-width: 74px; }
+.plan-day li.travel-li { background: color-mix(in srgb, var(--accent) 20%, var(--panel-2)); }

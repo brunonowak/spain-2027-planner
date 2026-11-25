@@ -1,8 +1,9 @@
 // Shared state, helpers and actions for the TV and phone sites.
-import * as S from './store.js?v=580565';
-import { ROUTES, CARDS, DETAILS, PRICES, TRIP_START } from './seed.js?v=580565';
+import * as S from './store.js?v=581539';
+import { ROUTES, CARDS, DETAILS, PRICES, TRIP_START } from './seed.js?v=581539';
+import { EXTRA_CARDS, MOVES, ARRIVAL, DEPARTURE } from './seed-extra.js?v=581539';
 
-export { isDemo } from './store.js?v=580565';
+export { isDemo } from './store.js?v=581539';
 
 export const STEPS = [
   { id: 'route', label: 'Pick the route' },
@@ -22,8 +23,45 @@ export const CATS = {
   food: { label: 'Food & drink', icon: '🍷' },
   experience: { label: 'Experience', icon: '💃' },
   hotel: { label: 'Hotel', icon: '🛏️' },
+  restaurant: { label: 'Restaurant', icon: '🍽️' },
+  dish: { label: 'Taste', icon: '🥘' },
+  shop: { label: 'Shop', icon: '🛍️' },
   other: { label: 'Other', icon: '✨' },
 };
+
+/** Sections each base is walked through, in order. */
+export const GROUPS = [
+  { id: 'see', label: 'Sights & trips', icon: '🏛️', cats: ['sight', 'daytrip', 'experience', 'other'] },
+  { id: 'stay', label: 'Hotels', icon: '🛏️', cats: ['hotel'] },
+  { id: 'eat', label: 'Restaurants', icon: '🍽️', cats: ['restaurant', 'food'] },
+  { id: 'taste', label: 'Tastes', icon: '🥘', cats: ['dish'] },
+  { id: 'shop', label: 'Shops', icon: '🛍️', cats: ['shop'] },
+];
+export const groupOf = (card) => GROUPS.find((g) => g.cats.includes(card.cat))?.id || 'see';
+
+/** Time slots in a day. */
+export const SLOTS = [
+  { id: 'morning', label: 'Morning', icon: '🌅' },
+  { id: 'lunch', label: 'Lunch', icon: '🍽️' },
+  { id: 'afternoon', label: 'Afternoon', icon: '☀️' },
+  { id: 'dinner', label: 'Dinner', icon: '🍷' },
+  { id: 'evening', label: 'Evening', icon: '🌙' },
+];
+export function defaultSlot(card) {
+  if (card.cat === 'restaurant') return /dinner|tapas|aperitif/i.test(card.time || '') && !/lunch/i.test(card.time || '') ? 'dinner' : 'lunch';
+  if (card.cat === 'food' || card.cat === 'experience') return 'evening';
+  if (card.cat === 'shop') return 'afternoon';
+  return 'morning';
+}
+/** Labels for the three fact boxes, by category. */
+export function factLabels(card) {
+  if (card.cat === 'hotel') return ['Area', 'Per night (room)', 'Good to know'];
+  if (card.cat === 'restaurant') return ['Best for', 'Per person', 'Booking'];
+  if (card.cat === 'shop') return ['Where', 'Prices', 'Shipping'];
+  if (card.cat === 'dish') return ['When', 'Price', 'Booking'];
+  return ['Time', 'Cost per person', 'Book ahead?'];
+}
+export const mapsLink = (card) => card.link && /google\.com\/maps/.test(card.link) ? card.link : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${card.title} ${CITIES[card.city] || ''} Spain`)}`;
 
 export const VOTES = [
   { id: 'must', label: 'Must do', short: 'Must' },
@@ -318,7 +356,12 @@ export async function deleteCard(id) {
   await log(`Deleted “${before?.title || 'card'}”`, 'cards/' + id, before);
 }
 export const decide = (id, tier) => saveCard(id, { decision: tier || S.deleteField() }, tier ? `Decided “${card(id)?.title}”: ${TIER_LABEL[tier]}` : `Re-opened “${card(id)?.title}”`);
-export const scheduleCard = (id, date) => saveCard(id, { day: date || S.deleteField() }, date ? `Put “${card(id)?.title}” on ${fmtDate(date)}` : `Unscheduled “${card(id)?.title}”`);
+export function scheduleCard(id, date, slot) {
+  const c = card(id);
+  if (!date) return saveCard(id, { day: S.deleteField(), slot: S.deleteField() }, `Unscheduled “${c?.title}”`);
+  const sl = slot || c?.slot || defaultSlot(c || {});
+  return saveCard(id, { day: date, slot: sl }, `Put “${c?.title}” on ${fmtDate(date)} (${SLOTS.find((x) => x.id === sl)?.label})`);
+}
 
 export async function undo(h) {
   if (h.before) await S.setDoc(h.path, h.before);
@@ -357,16 +400,23 @@ export function routeScores() {
   return Object.values(scores).sort((a, b) => b.points - a.points || b.firsts - a.firsts);
 }
 
-/** Steps of the "bases" walkthrough for the locked route. */
+/** Sections (sights, hotels, restaurants…) of a city that have cards, in walk order. */
+export function sectionsFor(city) {
+  const all = city ? cardsFor(city) : [];
+  return GROUPS.map((g) => ({ group: g, list: all.filter((c) => g.cats.includes(c.cat)) })).filter((x) => x.list.length);
+}
+/** Where the "Fill each base" walkthrough is: base → section → card. */
 export function baseWalk() {
   const r = lockedRoute();
   const cities = routeCities(r);
   const s = state.session || {};
   const bi = Math.min(s.baseIndex || 0, Math.max(cities.length - 1, 0));
   const city = cities[bi];
-  const list = city ? cardsFor(city) : [];
+  const sections = sectionsFor(city);
+  const gi = Math.min(s.groupIndex || 0, Math.max(sections.length - 1, 0));
+  const list = sections[gi]?.list || [];
   const ci = Math.min(s.cardIndex || 0, Math.max(list.length - 1, 0));
-  return { route: r, cities, bi, city, list, ci, card: list[ci] };
+  return { route: r, cities, bi, city, sections, gi, group: sections[gi]?.group, list, ci, card: list[ci] };
 }
 
 export function stepNav(dir) {
@@ -376,10 +426,15 @@ export function stepNav(dir) {
     const w = baseWalk();
     if (dir > 0) {
       if (w.ci < w.list.length - 1) return setSession({ cardIndex: w.ci + 1 });
-      if (w.bi < w.cities.length - 1) return setSession({ baseIndex: w.bi + 1, cardIndex: 0 });
+      if (w.gi < w.sections.length - 1) return setSession({ groupIndex: w.gi + 1, cardIndex: 0 });
+      if (w.bi < w.cities.length - 1) return setSession({ baseIndex: w.bi + 1, groupIndex: 0, cardIndex: 0 });
     } else {
       if (w.ci > 0) return setSession({ cardIndex: w.ci - 1 });
-      if (w.bi > 0) return setSession({ baseIndex: w.bi - 1, cardIndex: Math.max(cardsFor(w.cities[w.bi - 1]).length - 1, 0) });
+      if (w.gi > 0) return setSession({ groupIndex: w.gi - 1, cardIndex: w.sections[w.gi - 1].list.length - 1 });
+      if (w.bi > 0) {
+        const prev = sectionsFor(w.cities[w.bi - 1]);
+        return setSession({ baseIndex: w.bi - 1, groupIndex: Math.max(prev.length - 1, 0), cardIndex: Math.max((prev[prev.length - 1]?.list.length || 1) - 1, 0) });
+      }
     }
   }
   const next = Math.min(Math.max(stepIdx + dir, 0), STEPS.length - 1);
@@ -387,24 +442,61 @@ export function stepNav(dir) {
   const patch = { step: STEPS[next].id };
   if (STEPS[next].id === 'bases') {
     const cities = routeCities(lockedRoute());
-    if (dir > 0) Object.assign(patch, { baseIndex: 0, cardIndex: 0 });
-    else Object.assign(patch, { baseIndex: Math.max(cities.length - 1, 0), cardIndex: Math.max(cardsFor(cities[cities.length - 1]).length - 1, 0) });
+    if (dir > 0) Object.assign(patch, { baseIndex: 0, groupIndex: 0, cardIndex: 0 });
+    else {
+      const last = sectionsFor(cities[cities.length - 1]);
+      Object.assign(patch, { baseIndex: Math.max(cities.length - 1, 0), groupIndex: Math.max(last.length - 1, 0), cardIndex: Math.max((last[last.length - 1]?.list.length || 1) - 1, 0) });
+    }
   }
   return setSession(patch);
 }
-export const goStep = (id) => setSession({ step: id, ...(id === 'bases' ? { baseIndex: 0, cardIndex: 0 } : {}) });
+export const goStep = (id) => setSession({ step: id, ...(id === 'bases' ? { baseIndex: 0, groupIndex: 0, cardIndex: 0 } : {}) });
 
-/** Cards that make the plan for the locked route (must-dos, optionally if-time). */
+/** Cards that go on the day plan for the locked route (must-dos, optionally if-time). Hotels and tastes aren't scheduled. */
 export function planCards(includeIf) {
   const cities = routeCities(lockedRoute());
-  return sortedCards(state.cards.filter((c) => cities.includes(c.city) && (tierOf(c) === 'must' || (includeIf && tierOf(c) === 'if'))));
+  return sortedCards(state.cards.filter((c) => cities.includes(c.city) && !['hotel', 'dish'].includes(c.cat) && (tierOf(c) === 'must' || (includeIf && tierOf(c) === 'if'))));
+}
+
+/** The hotel picked for a city, if any. */
+export const chosenHotel = (city) => card(state.session?.hotels?.[city]);
+export async function chooseHotel(city, cardId) {
+  const before = state.session ? { ...state.session } : null;
+  await setSession({ hotels: { [city]: cardId || null } });
+  await log(cardId ? `Picked ${card(cardId)?.title} for ${CITIES[city]}` : `Cleared the ${CITIES[city]} hotel`, 'session/state', before);
+}
+
+/** Travel on the plan: arrival, moves between bases, departure. [{date, slot, title, time, cost, note}] */
+export function travelFor(route) {
+  if (!route) return [];
+  const nights = routeNights(route);
+  const out = [{ date: nights[0].date, slot: 'afternoon', title: ARRIVAL.title, note: ARRIVAL.note }];
+  const moves = route.moves || (MOVES[route.id] || []).map(([mode, time, cost, note]) => ({ mode, time, cost, note }));
+  route.bases.slice(1).forEach((b, i) => {
+    const first = nights.find((n) => n.stay === i + 1);
+    const m = moves[i] || { mode: '🚆', note: route.legs?.[i] || '' };
+    const [icon, ...words] = (m.mode || '🚆').split(' ');
+    out.push({ date: first.date, slot: 'morning', title: `${icon} ${CITIES[route.bases[i].city]} → ${CITIES[b.city]}`, time: [words.join(' '), m.time].filter(Boolean).join(' · '), cost: m.cost, note: m.note });
+  });
+  out.push({ date: addDays(nights[nights.length - 1].date, 1), slot: 'morning', title: DEPARTURE.title, note: DEPARTURE.note });
+  return out;
 }
 
 // ---------- seeding (setup page) ----------
 export async function seedStarter() {
   let added = 0;
   for (const r of ROUTES) {
-    if (!(await S.getDoc('routes/' + r.id))) { const { id, ...rest } = r; await S.setDoc('routes/' + id, rest); added++; }
+    const moves = (MOVES[r.id] || []).map(([mode, time, cost, note]) => ({ mode, time, cost, note }));
+    const existing = await S.getDoc('routes/' + r.id);
+    if (!existing) { const { id, ...rest } = r; await S.setDoc('routes/' + id, { ...rest, moves }); added++; }
+    else if (!existing.moves && moves.length) { await S.updateDoc('routes/' + r.id, { moves }); added++; }
+  }
+  for (const [i, c] of EXTRA_CARDS.entries()) {
+    if (!(await S.getDoc('cards/' + c.id))) {
+      const { id, ...rest } = c;
+      await S.setDoc('cards/' + id, { ...rest, order: 1000 + i, votes: {}, createdAt: now() + 1000 + i, createdBy: 'Starter' });
+      added++;
+    }
   }
   for (const [i, c] of CARDS.entries()) {
     const [highlights, tip] = DETAILS[c.id] || [[], ''];
@@ -432,7 +524,7 @@ async function seedDemo() {
     await S.setDoc('members/' + email, { name: n });
     await S.setDoc('people/demo-' + n.toLowerCase(), { uid: 'demo-' + n.toLowerCase(), email, name: n });
   }
-  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=580565');
+  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=581539');
   await S.setDoc('meta/flights', DEMO_FLIGHTS);
 }
 export { S as store };

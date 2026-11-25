@@ -2,8 +2,8 @@ import {
   boot, state, onState, STEPS, CITIES, CATS, TIER_LABEL, esc, $, $$, fmtDate, addDays, initials,
   lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
-  imageHtml, cardImage, cardWiki, parseVideo, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js?v=580565';
+  imageHtml, cardImage, cardWiki, parseVideo, GROUPS, SLOTS, factLabels, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, isDemo, revealed,
+} from './common.js?v=581539';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
@@ -111,6 +111,7 @@ function renderBases(main) {
           <div class="base-tabs" id="base-tabs"></div>
           <div class="muted" id="base-count"></div>
         </div>
+        <div class="base-tabs group-tabs" id="group-tabs"></div>
         <div class="stage">
           <div class="stage-media" id="media"></div>
           <div class="stage-info" id="info"></div>
@@ -119,8 +120,12 @@ function renderBases(main) {
       </div>`;
   }
   $('#base-tabs').innerHTML = w.cities.map((c, i) => `<button class="base-tab ${i === w.bi ? 'active' : ''}" data-base="${i}">${esc(CITIES[c])} · ${cardsFor(c).length} ideas</button>`).join('');
-  $$('[data-base]').forEach((b) => (b.onclick = () => setSession({ baseIndex: +b.dataset.base, cardIndex: 0 })));
-  $('#base-count').innerHTML = w.card ? `Idea ${w.ci + 1} of ${w.list.length} in ${esc(CITIES[w.city])}
+  $$('[data-base]').forEach((b) => (b.onclick = () => setSession({ baseIndex: +b.dataset.base, groupIndex: 0, cardIndex: 0 })));
+  const hotel = chosenHotel(w.city);
+  $('#group-tabs').innerHTML = w.sections.map((sec, i) => `<button class="base-tab sub ${i === w.gi ? 'active' : ''}" data-group="${i}">${sec.group.icon} ${sec.group.label} · ${sec.list.length}</button>`).join('')
+    + `<span class="hotel-pill">${hotel ? `🛏️ Staying at <b>${esc(hotel.title)}</b>` : '🛏️ No hotel picked yet'}</span>`;
+  $$('[data-group]').forEach((b) => (b.onclick = () => setSession({ groupIndex: +b.dataset.group, cardIndex: 0 })));
+  $('#base-count').innerHTML = w.card ? `${esc(w.group?.label || '')} ${w.ci + 1} of ${w.list.length} in ${esc(CITIES[w.city])}
     <span class="legend"><i class="dot-must"></i>Must do <i class="dot-if"></i>If time <i class="dot-skip"></i>Skip <i class="dot-split"></i>Split <i class="dot-none"></i>Not revealed</span>` : '';
 
   const card = w.card;
@@ -164,10 +169,11 @@ function renderBases(main) {
     ${card.highlights?.length ? `<div class="highlights"><b>Don’t miss</b><ul>${card.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : wikiBlurb(card)}
     ${card.tip ? `<p class="tip">💡 ${esc(card.tip)}</p>` : ''}
     <div class="facts">
-      <div class="fact"><b>Time</b>${esc(card.time || '—')}</div>
-      <div class="fact"><b>Cost per person</b>${esc(card.cost || '—')}</div>
-      <div class="fact"><b>Book ahead?</b>${esc(card.booking || '—')}</div>
+      ${factLabels(card).map((l, i) => `<div class="fact"><b>${l}</b>${esc([card.time, card.cost, card.booking][i] || '—')}</div>`).join('')}
     </div>
+    ${card.cat === 'hotel' ? `<div class="hotel-pick">${hotel?.id === card.id
+      ? `<span class="tier tier-must">✓ Our ${esc(CITIES[card.city])} hotel</span> <button class="btn btn-ghost" id="unpick">Clear</button>`
+      : `<button class="btn btn-primary" id="pick">Pick this hotel for ${esc(CITIES[card.city])}</button>`}</div>` : ''}
     <div class="vote-panel">
       <h4><span>Votes · ${voted.length} of ${vs.length}</span>
         ${!all ? `<button class="btn btn-ghost" id="reveal-card" style="font-size:.9em;padding:.3em .9em">${reveal ? 'Hide' : 'Reveal now (R)'}</button>` : ''}</h4>
@@ -184,6 +190,8 @@ function renderBases(main) {
         </div>` : `<p class="muted" style="margin:.5em 0 0;font-size:.8em">Results show when everyone has voted.</p>`}
     </div>`;
   $('#reveal-card') && ($('#reveal-card').onclick = revealCurrent);
+  $('#pick') && ($('#pick').onclick = () => chooseHotel(card.city, card.id));
+  $('#unpick') && ($('#unpick').onclick = () => chooseHotel(card.city, null));
 
   $('#strip').innerHTML = w.list.map((c, i) => `
     <div class="film ${i === w.ci ? 'active' : ''}" data-card="${i}">
@@ -271,25 +279,38 @@ function renderDays(main) {
   if (!r) { main.innerHTML = `<div class="empty-big"><div><h3>No route locked yet</h3></div></div>`; return; }
   const nights = routeNights(r);
   const items = planCards(local.includeIf);
+  const travel = travelFor(r);
   const notes = Object.fromEntries(state.days.map((d) => [d.id, d.note]));
   const datesFor = (city) => nights.filter((n) => n.city === city);
   const unscheduled = items.filter((c) => !c.day || !nights.some((n) => n.date === c.day));
   const lastDay = addDays(nights[nights.length - 1].date, 1);
+  const slotOrder = Object.fromEntries(SLOTS.map((x, i) => [x.id, i]));
+  const slotIcon = (id) => SLOTS.find((x) => x.id === id)?.icon || '';
+
+  const dayCell = (date, n, i) => {
+    const entries = [
+      ...travel.filter((t) => t.date === date).map((t) => ({ slot: t.slot, html: `<div class="day-item travel-item" title="${esc([t.time, t.cost, t.note].filter(Boolean).join(' · '))}">${esc(t.title)}${t.time ? `<small>${esc(t.time)}</small>` : ''}</div>` })),
+      ...items.filter((c) => c.day === date).map((c) => ({ slot: c.slot || defaultSlot(c), html: `<div class="day-item"><span>${slotIcon(c.slot || defaultSlot(c))}</span>${esc(c.title)}<button data-unsched="${c.id}" title="Remove">×</button></div>` })),
+    ].sort((x, y) => slotOrder[x.slot] - slotOrder[y.slot]);
+    const hotel = n && chosenHotel(n.city);
+    return `<div class="day ${n ? '' : 'travel'}">
+      <header><b>${fmtDate(date, { weekday: 'short' })} ${fmtDate(date, { month: 'short', day: 'numeric' })}</b><span class="muted">${n ? `Day ${i + 1}` : 'Day ' + (i + 1)}</span></header>
+      <span class="city city-${n ? n.city : 'madrid'}">${n ? esc(CITIES[n.city]) : 'Fly home'}</span>
+      ${n ? `<div class="hotel-line">${hotel ? '🛏️ ' + esc(hotel.title) : '<span class="muted">🛏️ hotel not picked</span>'}</div>` : ''}
+      ${entries.map((e) => e.html).join('')}
+      ${notes[date] ? `<div class="note">${esc(notes[date])}</div>` : ''}
+    </div>`;
+  };
 
   main.innerHTML = `
     <h2 class="h-section">Build the days</h2>
-    <p class="lead">Drop each must-do onto a day. ${unscheduled.length ? `${unscheduled.length} still to place.` : 'Everything is placed.'}
-      <label class="toggle" style="margin-left:1em"><input type="checkbox" id="incl-if" ${local.includeIf ? 'checked' : ''}> Include “If time” ideas</label></p>
+    <p class="lead">Put each must-do on a day and time. Trains, transfers and flights are already on. ${unscheduled.length ? `${unscheduled.length} still to place.` : 'Everything is placed.'}
+      <label class="toggle" style="margin-left:1em"><input type="checkbox" id="incl-if" ${local.includeIf ? 'checked' : ''}> Include “If time” ideas</label>
+      <span class="legend">${SLOTS.map((x) => `${x.icon} ${x.label}`).join(' · ')}</span></p>
     <div class="days-layout">
       <div class="days-grid">
-        ${nights.map((n, i) => `
-          <div class="day">
-            <header><b>${fmtDate(n.date, { weekday: 'short' })} ${fmtDate(n.date, { month: 'short', day: 'numeric' })}</b><span class="muted">Day ${i + 1}</span></header>
-            <span class="city city-${n.city}">${esc(CITIES[n.city])}${i === 0 ? ' · arrive' : nights[i - 1].city !== n.city ? ' · travel' : ''}</span>
-            ${items.filter((c) => c.day === n.date).map((c) => `<div class="day-item"><span>${CATS[c.cat]?.icon || ''}</span>${esc(c.title)}<button data-unsched="${c.id}" title="Remove">×</button></div>`).join('')}
-            ${notes[n.date] ? `<div class="note">${esc(notes[n.date])}</div>` : ''}
-          </div>`).join('')}
-        <div class="day travel"><header><b>${fmtDate(lastDay, { weekday: 'short' })} ${fmtDate(lastDay, { month: 'short', day: 'numeric' })}</b></header><span class="city city-madrid">Fly home</span></div>
+        ${nights.map((n, i) => dayCell(n.date, n, i)).join('')}
+        ${dayCell(lastDay, null, nights.length)}
       </div>
       <aside class="unscheduled">
         <h4>To place</h4>
@@ -298,11 +319,11 @@ function renderDays(main) {
           if (!list.length) return '';
           return `<div class="tiny muted" style="margin-top:.4em;font-weight:700">${esc(CITIES[city])}</div>` + list.map((c) => `
             <div class="u-item"><span>${CATS[c.cat]?.icon || ''} ${esc(c.title)} ${tierOf(c) === 'if' ? '<span class="tier tier-if">If time</span>' : ''}</span>
-              <select data-sched="${c.id}"><option value="">Put on…</option>${datesFor(city).map((n) => `<option value="${n.date}">${fmtDate(n.date)}</option>`).join('')}</select></div>`).join('');
+              <select data-sched="${c.id}"><option value="">Put on…</option>${datesFor(city).map((n) => `<optgroup label="${fmtDate(n.date)}">${SLOTS.map((x) => `<option value="${n.date}|${x.id}" ${x.id === defaultSlot(c) ? '' : ''}>${fmtDate(n.date, { month: 'short', day: 'numeric' })} · ${x.label}</option>`).join('')}</optgroup>`).join('')}</select></div>`).join('');
         }).join('') : '<p class="muted tiny">Nothing left — every idea has a day.</p>'}
       </aside>
     </div>`;
   $('#incl-if').onchange = (e) => { local.includeIf = e.target.checked; render(); };
-  $$('[data-sched]', main).forEach((s) => (s.onchange = () => s.value && scheduleCard(s.dataset.sched, s.value)));
+  $$('[data-sched]', main).forEach((s) => (s.onchange = () => { if (!s.value) return; const [d, sl] = s.value.split('|'); scheduleCard(s.dataset.sched, d, sl); }));
   $$('[data-unsched]', main).forEach((b) => (b.onclick = () => scheduleCard(b.dataset.unsched, null)));
 }
