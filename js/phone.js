@@ -106,7 +106,10 @@ function nowRoute() {
   }
   const mine = state.rankings.find((r) => r.uid === state.me.uid);
   const routes = [...state.routes].sort((a, b) => a.order - b.order);
-  if (!ui.rankDraft) ui.rankDraft = mine?.order?.length === routes.length ? [...mine.order] : routes.map((r) => r.id);
+  if (!routes.length) return `<div class="ph-card"><h2>No routes loaded yet</h2><p class="muted" style="margin:0">Bruno needs to open the Setup page and tap <b>Load starter content</b>. They’ll appear here straight away.</p></div>`;
+  if (!ui.rankDraft || ui.rankDraft.length !== routes.length || ui.rankDraft.some((id) => !route(id))) {
+    ui.rankDraft = mine?.order?.length === routes.length && mine.order.every((id) => route(id)) ? [...mine.order] : routes.map((r) => r.id);
+  }
   const saved = mine && JSON.stringify(mine.order) === JSON.stringify(ui.rankDraft);
   const reveal = state.session.revealRoutes;
   return `
