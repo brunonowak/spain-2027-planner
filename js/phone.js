@@ -3,8 +3,8 @@ import {
   lockedRoute, route, card, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep,
   voters, voteCounts, autoTier, tierOf, vote, saveCard, addCard, deleteCard, decide, scheduleCard, undo,
   setRanking, lockRoute, routeScores, planCards, addIdea, deleteIdea, setDayNote, addComment, watchComments,
-  imageHtml, cardWiki, parseVideo, GROUPS, SLOTS, groupOf, factLabels, mapsLink, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, signOut, isDemo, revealed,
-} from './common.js?v=581539';
+  imageHtml, VERSION, cardWiki, parseVideo, GROUPS, SLOTS, groupOf, factLabels, mapsLink, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, signOut, isDemo, revealed,
+} from './common.js?v=586234';
 
 const root = document.getElementById('app');
 const ui = {
@@ -304,6 +304,7 @@ function viewTrip(main) {
       <a class="btn" href="tv.html${isDemo ? location.search : ''}" target="_blank">📺 Open TV view</a>
       <a class="btn" href="setup.html${isDemo ? location.search : ''}">⚙️ Setup</a>
       <button class="btn btn-ghost" id="signout">Sign out (${esc(state.me.name)})</button>
+      <span class="tiny muted" style="align-self:center">version ${VERSION}</span>
     </div>`;
   $$('[data-undo]', main).forEach((b) => (b.onclick = async () => {
     const h = state.history.find((x) => x.id === b.dataset.undo);

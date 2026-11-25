@@ -1,9 +1,12 @@
 // Shared state, helpers and actions for the TV and phone sites.
-import * as S from './store.js?v=581539';
-import { ROUTES, CARDS, DETAILS, PRICES, TRIP_START } from './seed.js?v=581539';
-import { EXTRA_CARDS, MOVES, ARRIVAL, DEPARTURE } from './seed-extra.js?v=581539';
+import * as S from './store.js?v=586234';
+import { ROUTES, CARDS, DETAILS, PRICES, TRIP_START } from './seed.js?v=586234';
+import { EXTRA_CARDS, MOVES, ARRIVAL, DEPARTURE } from './seed-extra.js?v=586234';
 
-export { isDemo } from './store.js?v=581539';
+export { isDemo } from './store.js?v=586234';
+
+/** Build tag of the code that's running, shown on screen so an out-of-date page is easy to spot. */
+export const VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 
 export const STEPS = [
   { id: 'route', label: 'Pick the route' },
@@ -524,7 +527,7 @@ async function seedDemo() {
     await S.setDoc('members/' + email, { name: n });
     await S.setDoc('people/demo-' + n.toLowerCase(), { uid: 'demo-' + n.toLowerCase(), email, name: n });
   }
-  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=581539');
+  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=586234');
   await S.setDoc('meta/flights', DEMO_FLIGHTS);
 }
 export { S as store };

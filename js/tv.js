@@ -2,8 +2,8 @@ import {
   boot, state, onState, STEPS, CITIES, CATS, TIER_LABEL, esc, $, $$, fmtDate, addDays, initials,
   lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
-  imageHtml, cardImage, cardWiki, parseVideo, GROUPS, SLOTS, factLabels, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js?v=581539';
+  imageHtml, VERSION, cardImage, cardWiki, parseVideo, GROUPS, SLOTS, factLabels, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, isDemo, revealed,
+} from './common.js?v=586234';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
@@ -51,7 +51,7 @@ function render() {
   const main = $('#main');
   if (main.dataset.view !== step) { main.dataset.view = step; main.innerHTML = ''; }
   ({ route: renderRoute, bases: renderBases, splits: renderSplits, days: renderDays })[step]?.(main);
-  $('#foot-center').textContent = state.session.updatedBy ? `Last moved by ${state.session.updatedBy}` : 'Anyone can move the session from their phone, or use ← → here';
+  $('#foot-center').textContent = (state.session.updatedBy ? `Last moved by ${state.session.updatedBy}` : 'Anyone can move the session from their phone, or use ← → here') + ` · version ${VERSION}`;
 }
 
 // ---------------- Step 1: route ----------------
