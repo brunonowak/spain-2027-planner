@@ -66,7 +66,7 @@ a { color: var(--accent-2); }
 
 /* ===================== TV ===================== */
 body.tv { overflow: hidden; }
-.tv-app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; padding: 2.2vh 3vw; gap: 2vh; font-size: clamp(14px, 1.15vw, 26px); }
+.tv-app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; padding: 2.2vh 3vw; gap: 2vh; font-size: clamp(12px, min(1.15vw, 2.05vh), 26px); }
 .tv-top { display: flex; align-items: center; gap: 2vw; }
 .tv-title { font-family: var(--display); font-size: 2em; font-weight: 600; white-space: nowrap; }
 .tv-title small { display: block; font-family: var(--body); font-size: .42em; font-weight: 500; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
@@ -88,7 +88,7 @@ body.tv { overflow: hidden; }
 
 /* route step */
 .routes-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2vw; height: calc(100% - 6.5em); }
-.route-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1em 1.2em; display: flex; flex-direction: column; gap: .6em; position: relative; overflow: hidden; }
+.route-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1em 1.2em; display: flex; flex-direction: column; gap: .6em; position: relative; overflow-y: auto; scrollbar-width: thin; }
 .route-card > * { flex-shrink: 0; }
 .route-card.locked { border-color: var(--must); box-shadow: 0 0 0 3px color-mix(in srgb, var(--must) 35%, transparent); }
 .route-card .num { font-family: var(--display); font-size: 2.6em; line-height: 1; color: var(--accent-2); }
@@ -98,7 +98,7 @@ body.tv { overflow: hidden; }
 .route-base { display: flex; justify-content: space-between; padding: .45em .7em; background: var(--panel-2); border-radius: 10px; font-weight: 600; font-size: .9em; }
 .route-base span { color: var(--muted); font-weight: 500; }
 .route-legs { margin: 0; padding-left: 1.1em; color: var(--muted); font-size: .78em; line-height: 1.5; }
-.route-note { font-size: .75em; color: var(--muted); margin-top: auto; }
+.route-note { font-size: .75em; color: var(--muted); }
 .score-bar { height: .6em; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
 .score-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: inherit; transition: width .8s; }
 .rank-badge { position: absolute; top: .8em; right: .9em; font-weight: 800; font-size: .9em; padding: .25em .7em; border-radius: 999px; background: var(--accent-2); color: #2a1d05; }
@@ -274,3 +274,4 @@ table.flights th { color: var(--muted); font-weight: 600; font-size: 11px; text-
 .landing-links a b { display: block; font-family: var(--display); font-size: 24px; margin: 6px 0 4px; }
 .landing-links a span { font-size: 34px; }
 @media (max-width: 560px) { .landing-links { grid-template-columns: 1fr; } }
+

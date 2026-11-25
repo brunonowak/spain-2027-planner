@@ -4,7 +4,7 @@ import {
   voters, voteCounts, autoTier, tierOf, vote, saveCard, addCard, deleteCard, decide, scheduleCard, undo,
   setRanking, lockRoute, routeScores, planCards, addIdea, deleteIdea, setDayNote, addComment, watchComments,
   imageHtml, parseVideo, youtubeSearch, sortedCards, signOut, isDemo, revealed,
-} from './common.js?v=fb082ab';
+} from './common.js?v=579806';
 
 const root = document.getElementById('app');
 const ui = {

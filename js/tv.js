@@ -3,7 +3,7 @@ import {
   lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
   imageHtml, cardImage, parseVideo, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js?v=fb082ab';
+} from './common.js?v=579806';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
@@ -81,13 +81,13 @@ function renderRoute(main) {
           <h3>${esc(r.name)}</h3>
           <p class="tag">${esc(r.tagline)}</p>
           ${reveal ? `<div class="score-bar"><i style="width:${(sc.points / max) * 100}%"></i></div><div class="tiny muted">${sc.firsts} first-place vote${sc.firsts === 1 ? '' : 's'}</div>` : ''}
+          ${reveal && !locked ? `<div class="route-actions"><button class="btn btn-primary" data-lock="${r.id}">Lock this route</button></div>` : ''}
+          ${locked === r.id ? `<div class="route-actions"><span class="tier tier-must">✓ Locked</span></div>` : ''}
           <div class="route-bases">
             ${r.bases.map((b, i) => `<div class="route-base">${esc(CITIES[b.city])}<span>${b.nights} nights · ${baseDateRange(r, i)}</span></div>`).join('')}
           </div>
           <ul class="route-legs">${(r.legs || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
           <div class="route-note">${esc(r.notes || '')}</div>
-          ${reveal && !locked ? `<div class="route-actions"><button class="btn btn-primary" data-lock="${r.id}">Lock this route</button></div>` : ''}
-          ${locked === r.id ? `<div class="route-actions"><span class="tier tier-must">✓ Locked</span></div>` : ''}
         </article>`;
       }).join('')}
     </div>`;

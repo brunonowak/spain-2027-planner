@@ -1,8 +1,8 @@
 // Shared state, helpers and actions for the TV and phone sites.
-import * as S from './store.js?v=fb082ab';
-import { ROUTES, CARDS, TRIP_START } from './seed.js?v=fb082ab';
+import * as S from './store.js?v=579806';
+import { ROUTES, CARDS, TRIP_START } from './seed.js?v=579806';
 
-export { isDemo } from './store.js?v=fb082ab';
+export { isDemo } from './store.js?v=579806';
 
 export const STEPS = [
   { id: 'route', label: 'Pick the route' },
@@ -404,7 +404,7 @@ async function seedDemo() {
     await S.setDoc('members/' + email, { name: n });
     await S.setDoc('people/demo-' + n.toLowerCase(), { uid: 'demo-' + n.toLowerCase(), email, name: n });
   }
-  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=fb082ab');
+  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=579806');
   await S.setDoc('meta/flights', DEMO_FLIGHTS);
 }
 export { S as store };
