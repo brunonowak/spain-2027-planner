@@ -3,7 +3,7 @@ import {
   lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
   imageHtml, cardImage, parseVideo, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js';
+} from './common.js?v=fb082ab';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
