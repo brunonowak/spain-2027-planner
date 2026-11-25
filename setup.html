@@ -35,6 +35,12 @@
         <p class="muted" style="margin-top:0">Choose the <b>flights.json</b> file Claude gave you. Flights can only be loaded once and are read-only afterwards.</p>
         <input type="file" id="flights-file" accept="application/json,.json"> <span id="f-msg" class="muted"></span>
       </div>
+      <div class="ph-card"><h2>Start over</h2>
+        <p class="muted" style="margin-top:0">Idea cards, comments, notes and the parking lot are kept either way.</p>
+        <p><button class="btn" id="reset-route">Reset the route vote</button><br><span class="tiny muted">Clears everyone’s rankings, unlocks the route and sends the TV back to step 1.</span></p>
+        <p><button class="btn btn-danger" id="reset-votes">Reset all idea votes</button><br><span class="tiny muted">Also clears every Must do / If time / Skip vote, the decisions on splits, and which day each idea is on.</span></p>
+        <span id="reset-msg" class="muted"></span>
+      </div>
       <p class="tiny muted">Signed in as ${esc(state.me.email)}${isDemo ? ' (demo)' : ''}</p>
     </div>`;
 
@@ -54,6 +60,22 @@
       $('#seed-msg').textContent = 'Loading…';
       try { const n = await seedStarter(); $('#seed-msg').textContent = n ? `Added ${n} items.` : 'Everything was already there.'; }
       catch (e) { $('#seed-msg').textContent = ''; fail(e); }
+    };
+    const resetRoute = async () => {
+      for (const r of state.rankings) await store.deleteDoc('rankings/' + r.id);
+      await store.setDoc('session/state', { step: 'route', baseIndex: 0, cardIndex: 0, lockedRoute: null, revealRoutes: false, reveal: {}, updatedBy: state.me.name, updatedAt: Date.now() });
+    };
+    $('#reset-route').onclick = async () => {
+      if (!confirm('Clear all route rankings and unlock the route?')) return;
+      try { await resetRoute(); $('#reset-msg').textContent = '✓ Route vote reset'; } catch (e) { fail(e); }
+    };
+    $('#reset-votes').onclick = async () => {
+      if (!confirm('Clear the route vote AND every idea vote, decision and day placement? This can’t be undone.')) return;
+      try {
+        await resetRoute();
+        for (const c of state.cards) await store.updateDoc('cards/' + c.id, { votes: {}, decision: store.deleteField(), day: store.deleteField() });
+        $('#reset-msg').textContent = '✓ Everything reset';
+      } catch (e) { fail(e); }
     };
     $('#flights-file').onchange = async (e) => {
       const file = e.target.files[0]; if (!file) return;
