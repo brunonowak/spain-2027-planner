@@ -1,19 +1,24 @@
 // Shared state, helpers and actions for the TV and phone sites.
-import * as S from './store.js?v=586234';
-import { ROUTES, CARDS, DETAILS, PRICES, TRIP_START } from './seed.js?v=586234';
-import { EXTRA_CARDS, MOVES, ARRIVAL, DEPARTURE } from './seed-extra.js?v=586234';
+import * as S from './store.js?v=622549';
+import { ROUTES, CARDS, DETAILS, PRICES, TRIP_START } from './seed.js?v=622549';
+import { EXTRA_CARDS, MOVES, ARRIVAL, DEPARTURE, LEG_OPTIONS } from './seed-extra.js?v=622549';
 
-export { isDemo } from './store.js?v=586234';
+export { isDemo } from './store.js?v=622549';
 
 /** Build tag of the code that's running, shown on screen so an out-of-date page is easy to spot. */
 export const VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 
+/** The stages of the planning session, in order. Each stage is walked city by city (or leg by leg). */
 export const STEPS = [
-  { id: 'route', label: 'Pick the route' },
-  { id: 'bases', label: 'Fill each base' },
-  { id: 'splits', label: 'Settle the splits' },
-  { id: 'days', label: 'Build the days' },
+  { id: 'route', label: 'Route', icon: '🗺️', kind: 'rank' },
+  { id: 'hotels', label: 'Hotels', icon: '🛏️', kind: 'pick' },
+  { id: 'travel', label: 'Travel', icon: '🚆', kind: 'leg' },
+  { id: 'sights', label: 'Sights', icon: '🏛️', kind: 'tier', cats: ['sight', 'daytrip', 'experience', 'other'] },
+  { id: 'food', label: 'Food', icon: '🍽️', kind: 'tier', cats: ['restaurant', 'food', 'dish'] },
+  { id: 'shopping', label: 'Shopping', icon: '🛍️', kind: 'tier', cats: ['shop'] },
+  { id: 'days', label: 'Days', icon: '🗓️', kind: 'days' },
 ];
+export const stepDef = (id) => STEPS.find((s) => s.id === id) || STEPS[0];
 
 export const CITIES = {
   madrid: 'Madrid', seville: 'Seville', granada: 'Granada', malaga: 'Málaga',
@@ -199,7 +204,7 @@ export function imageHtml(card, cls = '') {
 // ---------- live state ----------
 export const state = {
   user: null, me: null, session: null, routes: [], cards: [], rankings: [], people: [],
-  members: [], parking: [], history: [], days: [], flights: null, ready: false,
+  members: [], parking: [], history: [], days: [], flights: null, picks: {}, ready: false,
 };
 const listeners = new Set();
 export const onState = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -265,6 +270,8 @@ function subscribeAll() {
     notify();
   });
   S.watchDoc('meta/flights', (v) => { state.flights = v; notify(); });
+  // Hotel and travel picks live next to the session state (session/pick-<key>).
+  S.watchCol('session', (list) => { state.picks = Object.fromEntries(list.filter((d) => d.id.startsWith('pick-')).map((d) => [d.id.slice(5), d.votes || {}])); notify(); });
   col('routes', 'routes');
   col('cards', 'cards');
   col('rankings', 'rankings');
@@ -403,57 +410,81 @@ export function routeScores() {
   return Object.values(scores).sort((a, b) => b.points - a.points || b.firsts - a.firsts);
 }
 
-/** Sections (sights, hotels, restaurants…) of a city that have cards, in walk order. */
-export function sectionsFor(city) {
-  const all = city ? cardsFor(city) : [];
-  return GROUPS.map((g) => ({ group: g, list: all.filter((c) => g.cats.includes(c.cat)) })).filter((x) => x.list.length);
-}
-/** Where the "Fill each base" walkthrough is: base → section → card. */
-export function baseWalk() {
+/** Positions to walk through in a stage: one per city (hotels), per leg (travel), or per card then a splits screen. */
+export function stageSeq(stepId) {
+  const st = stepDef(stepId);
   const r = lockedRoute();
   const cities = routeCities(r);
-  const s = state.session || {};
-  const bi = Math.min(s.baseIndex || 0, Math.max(cities.length - 1, 0));
-  const city = cities[bi];
-  const sections = sectionsFor(city);
-  const gi = Math.min(s.groupIndex || 0, Math.max(sections.length - 1, 0));
-  const list = sections[gi]?.list || [];
-  const ci = Math.min(s.cardIndex || 0, Math.max(list.length - 1, 0));
-  return { route: r, cities, bi, city, sections, gi, group: sections[gi]?.group, list, ci, card: list[ci] };
+  if (st.kind === 'pick') return cities.map((city) => ({ city }));
+  if (st.kind === 'leg') return legsFor(r).map((leg) => ({ leg: leg.i, city: leg.to }));
+  if (st.kind === 'tier') {
+    const out = [];
+    cities.forEach((city) => cardsFor(city).filter((c) => st.cats.includes(c.cat)).forEach((c) => out.push({ city, cardId: c.id })));
+    if (r) out.push({ splits: true });
+    return out;
+  }
+  return [{}];
+}
+/** Where the TV is right now. */
+export function current() {
+  const st = stepDef(state.session?.step);
+  const seq = stageSeq(st.id);
+  const pos = Math.max(0, Math.min(state.session?.pos || 0, seq.length - 1));
+  return { step: st.id, st, seq, pos, at: seq[pos] || {} };
+}
+/** Move the TV forward or back: through the current stage, then on to the next stage. (TV only.) */
+export function stepNav(dir) {
+  const c = current();
+  const p = c.pos + dir;
+  if (p >= 0 && p < c.seq.length) return setSession({ pos: p });
+  const i = STEPS.findIndex((x) => x.id === c.step) + dir;
+  if (i < 0 || i >= STEPS.length) return;
+  const seq = stageSeq(STEPS[i].id);
+  return setSession({ step: STEPS[i].id, pos: dir > 0 ? 0 : Math.max(seq.length - 1, 0) });
+}
+export const goStep = (id) => setSession({ step: id, pos: 0 });
+export const goPos = (pos) => setSession({ pos });
+
+/** Split votes still to settle in a 3-tier stage. */
+export function splitsFor(st) {
+  const cities = routeCities(lockedRoute());
+  return sortedCards(state.cards.filter((c) => cities.includes(c.city) && st.cats?.includes(c.cat) && !c.decision && autoTier(c) === 'split'));
 }
 
-export function stepNav(dir) {
-  const s = state.session || {};
-  const stepIdx = STEPS.findIndex((x) => x.id === (s.step || 'route'));
-  if (s.step === 'bases') {
-    const w = baseWalk();
-    if (dir > 0) {
-      if (w.ci < w.list.length - 1) return setSession({ cardIndex: w.ci + 1 });
-      if (w.gi < w.sections.length - 1) return setSession({ groupIndex: w.gi + 1, cardIndex: 0 });
-      if (w.bi < w.cities.length - 1) return setSession({ baseIndex: w.bi + 1, groupIndex: 0, cardIndex: 0 });
-    } else {
-      if (w.ci > 0) return setSession({ cardIndex: w.ci - 1 });
-      if (w.gi > 0) return setSession({ groupIndex: w.gi - 1, cardIndex: w.sections[w.gi - 1].list.length - 1 });
-      if (w.bi > 0) {
-        const prev = sectionsFor(w.cities[w.bi - 1]);
-        return setSession({ baseIndex: w.bi - 1, groupIndex: Math.max(prev.length - 1, 0), cardIndex: Math.max((prev[prev.length - 1]?.list.length || 1) - 1, 0) });
-      }
-    }
-  }
-  const next = Math.min(Math.max(stepIdx + dir, 0), STEPS.length - 1);
-  if (next === stepIdx) return;
-  const patch = { step: STEPS[next].id };
-  if (STEPS[next].id === 'bases') {
-    const cities = routeCities(lockedRoute());
-    if (dir > 0) Object.assign(patch, { baseIndex: 0, groupIndex: 0, cardIndex: 0 });
-    else {
-      const last = sectionsFor(cities[cities.length - 1]);
-      Object.assign(patch, { baseIndex: Math.max(cities.length - 1, 0), groupIndex: Math.max(last.length - 1, 0), cardIndex: Math.max((last[last.length - 1]?.list.length || 1) - 1, 0) });
-    }
-  }
-  return setSession(patch);
+// ---------- pick-one decisions (hotel per city, option per travel leg) ----------
+export const hotelKey = (city) => 'hotel-' + city;
+export const legKey = (routeId, i) => `leg-${routeId}-${i}`;
+/** Toggle my pick for a decision. */
+export function pick(key, optionId) {
+  const mine = state.picks[key]?.[state.me.uid];
+  return S.setDoc('session/pick-' + key, { votes: { [state.me.uid]: mine === optionId ? S.deleteField() : optionId } }, true);
 }
-export const goStep = (id) => setSession({ step: id, ...(id === 'bases' ? { baseIndex: 0, groupIndex: 0, cardIndex: 0 } : {}) });
+export const myPick = (key) => state.picks[key]?.[state.me?.uid];
+/** {optionId: [names]} */
+export function pickTally(key) {
+  const out = {};
+  Object.entries(state.picks[key] || {}).forEach(([uid, opt]) => { (out[opt] = out[opt] || []).push(nameOf(uid)); });
+  return out;
+}
+
+/** Legs between bases for a route, with the ways to travel each one. */
+export function legsFor(route) {
+  if (!route) return [];
+  const nights = routeNights(route);
+  return route.bases.slice(1).map((b, idx) => {
+    const first = nights.find((n) => n.stay === idx + 1);
+    const options = (LEG_OPTIONS[route.id]?.[idx]) || [{ id: 'train', icon: '🚆', mode: 'Train', time: '', cost: '', note: route.legs?.[idx] || '' }];
+    const key = legKey(route.id, idx);
+    const confirmed = state.session?.travel?.[key];
+    const chosen = options.find((o) => o.id === confirmed) || (options.length === 1 ? options[0] : null);
+    return { i: idx, key, from: route.bases[idx].city, to: b.city, date: first.date, options, chosen, confirmed: !!chosen };
+  });
+}
+export async function confirmLeg(key, optionId) {
+  const before = state.session ? { ...state.session } : null;
+  await setSession({ travel: { [key]: optionId || null } });
+  await log(optionId ? `Chose travel for ${key}` : `Re-opened travel ${key}`, 'session/state', before);
+}
 
 /** Cards that go on the day plan for the locked route (must-dos, optionally if-time). Hotels and tastes aren't scheduled. */
 export function planCards(includeIf) {
@@ -474,12 +505,9 @@ export function travelFor(route) {
   if (!route) return [];
   const nights = routeNights(route);
   const out = [{ date: nights[0].date, slot: 'afternoon', title: ARRIVAL.title, note: ARRIVAL.note }];
-  const moves = route.moves || (MOVES[route.id] || []).map(([mode, time, cost, note]) => ({ mode, time, cost, note }));
-  route.bases.slice(1).forEach((b, i) => {
-    const first = nights.find((n) => n.stay === i + 1);
-    const m = moves[i] || { mode: '🚆', note: route.legs?.[i] || '' };
-    const [icon, ...words] = (m.mode || '🚆').split(' ');
-    out.push({ date: first.date, slot: 'morning', title: `${icon} ${CITIES[route.bases[i].city]} → ${CITIES[b.city]}`, time: [words.join(' '), m.time].filter(Boolean).join(' · '), cost: m.cost, note: m.note });
+  legsFor(route).forEach((leg) => {
+    const o = leg.chosen || leg.options[0];
+    out.push({ date: leg.date, slot: 'morning', title: `${o.icon} ${CITIES[leg.from]} → ${CITIES[leg.to]}`, time: [o.mode, o.time].filter(Boolean).join(' · ') + (leg.chosen ? '' : ' (not decided)'), cost: o.cost, note: o.note });
   });
   out.push({ date: addDays(nights[nights.length - 1].date, 1), slot: 'morning', title: DEPARTURE.title, note: DEPARTURE.note });
   return out;
@@ -527,7 +555,7 @@ async function seedDemo() {
     await S.setDoc('members/' + email, { name: n });
     await S.setDoc('people/demo-' + n.toLowerCase(), { uid: 'demo-' + n.toLowerCase(), email, name: n });
   }
-  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=586234');
+  const { DEMO_FLIGHTS } = await import('./demo-flights.js?v=622549');
   await S.setDoc('meta/flights', DEMO_FLIGHTS);
 }
 export { S as store };

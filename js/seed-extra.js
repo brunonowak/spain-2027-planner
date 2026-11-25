@@ -160,3 +160,41 @@ export const MOVES = {
 };
 export const ARRIVAL = { title: '✈️ Land MAD T2 3:35pm', note: 'Taxi to the hotel (flat fare ~€33 to the centre). Keep the evening light.' };
 export const DEPARTURE = { title: '✈️ Fly home 10:25am', note: 'Leave the hotel by ~8:00am for MAD T2.' };
+
+// Ways to make each move between bases — the group picks one per leg. Costs are per person; ~ = estimate.
+const T = (time, cost, note) => ({ id: 'train', icon: '🚆', mode: 'Train', time, cost, note });
+const MAD_SEV = [
+  T('~2h30', '~€30–90', 'AVE or Iryo, Madrid Atocha → Sevilla Santa Justa. The line had a closure in late 2026 — book flexible fares.'),
+  { id: 'cordoba', icon: '🚆', mode: 'Train with a Córdoba stop', time: '~2h30 of trains + 3–4h in Córdoba', cost: '~€40–100 + Mezquita €15', note: 'Two tickets: Madrid → Córdoba, then Córdoba → Seville later. Bags need a locker or luggage service while you visit.' },
+];
+export const LEG_OPTIONS = {
+  r1: [
+    MAD_SEV,
+    [
+      { id: 'driver', icon: '🚐', mode: 'Private driver via Córdoba', time: '~4h driving + 3–4h stop', cost: '~€120–150 (≈€450–600 per vehicle)', note: 'Door to door; Mezquita and lunch in Córdoba on the way.' },
+      T('~2h30–3h30', '~€25–45', 'Seville Santa Justa → Granada. Fewer trains than the Madrid lines — check times.'),
+    ],
+    [T('~3h20–3h30', '~€30–80', 'Granada → Madrid.')],
+  ],
+  r2: [
+    MAD_SEV,
+    [
+      { id: 'driver', icon: '🚐', mode: 'Private driver via Ronda', time: '~3h driving + 2–3h stop', cost: '~€120–150 (≈€450–600 per vehicle)', note: 'Lunch and the gorge in Ronda on the way.' },
+      T('~2h', '~€20–35', 'Sevilla Santa Justa → Málaga María Zambrano.'),
+    ],
+    [T('~2h40', '~€30–90', 'Málaga María Zambrano → Madrid.')],
+  ],
+  r3: [
+    [T('~1h50', '~€20–60', 'AVE, Iryo or Ouigo: Madrid → Valencia Joaquín Sorolla.')],
+    [
+      T('~4h20', '~€40–90', 'Only 1–2 direct trains a day — book early.'),
+      { id: 'flight', icon: '✈️', mode: 'Flight', time: '~1h15 flight + airport time', cost: '~€50–150', note: 'Valencia → Seville; check airlines and schedules nearer the time.' },
+    ],
+    [T('~2h30', '~€30–90', 'Seville → Madrid.')],
+  ],
+  r4: [
+    [T('~3h15', '~€30–70', 'Alvia/AVE: Madrid Chamartín → Oviedo.')],
+    [T('~1h', '~€10–30', 'Oviedo → León.')],
+    [T('~2h05', '~€20–60', 'León → Madrid Chamartín.')],
+  ],
+};

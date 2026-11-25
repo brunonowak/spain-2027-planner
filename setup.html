@@ -6,12 +6,12 @@
   <title>Spain 2027 · Setup</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇪🇸</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=586234">
+  <link rel="stylesheet" href="css/styles.css?v=622549">
 </head>
 <body>
   <div id="app"></div>
   <script type="module">
-    import { boot, state, onState, esc, $, $$, seedStarter, store, isDemo, VERSION } from './js/common.js?v=586234';
+    import { boot, state, onState, esc, $, $$, seedStarter, store, isDemo, VERSION } from './js/common.js?v=622549';
     const root = document.getElementById('app');
     await boot(root, { surface: 'setup' });
     root.innerHTML = `<div class="plain-page">
@@ -37,9 +37,9 @@
       </div>
       <div class="ph-card"><h2>Start over</h2>
         <p class="muted" style="margin-top:0">Idea cards, comments, notes and the parking lot are kept either way.</p>
-        <p><button class="btn" id="reset-route">Reset the route vote</button><br><span class="tiny muted">Clears everyone’s rankings, unlocks the route and sends the TV back to step 1.</span></p>
+        <p><button class="btn" id="reset-route">Reset the route vote</button><br><span class="tiny muted">Clears everyone’s rankings, hotel and travel picks, unlocks the route and sends the TV back to the start.</span></p>
         <p><button class="btn btn-danger" id="reset-votes">Reset all idea votes</button><br><span class="tiny muted">Also clears every Must do / If time / Skip vote, the decisions on splits, and which day each idea is on.</span></p>
-        <p><button class="btn btn-primary" id="reset-all">Fresh start (for Friday)</button><br><span class="tiny muted">Wipes all test activity: rankings, votes, decisions, day plans and notes, comments, parking lot and change history. Keeps the routes, the starter ideas, the guest list and the flights.</span><br>
+        <p><button class="btn btn-primary" id="reset-all">Fresh start (for Friday)</button><br><span class="tiny muted">Wipes all test activity: rankings, hotel and travel picks, votes, decisions, day plans and notes, comments, parking lot and change history. Keeps the routes, the starter ideas, the guest list and the flights.</span><br>
           <label class="toggle" style="margin-top:6px"><input type="checkbox" id="rm-added"> Also delete ideas people added (keeps only the starter ideas)</label></p>
         <span id="reset-msg" class="muted"></span>
       </div>
@@ -65,7 +65,8 @@
     };
     const resetRoute = async () => {
       for (const r of state.rankings) await store.deleteDoc('rankings/' + r.id);
-      await store.setDoc('session/state', { step: 'route', baseIndex: 0, cardIndex: 0, lockedRoute: null, revealRoutes: false, reveal: {}, updatedBy: state.me.name, updatedAt: Date.now() });
+      for (const d of await store.getCol('session')) if (d.id.startsWith('pick-')) await store.deleteDoc('session/' + d.id);
+      await store.setDoc('session/state', { step: 'route', pos: 0, lockedRoute: null, revealRoutes: false, reveal: {}, hotels: {}, travel: {}, updatedBy: state.me.name, updatedAt: Date.now() });
     };
     $('#reset-route').onclick = async () => {
       if (!confirm('Clear all route rankings and unlock the route?')) return;

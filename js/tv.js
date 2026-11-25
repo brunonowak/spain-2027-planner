@@ -1,9 +1,9 @@
 import {
   boot, state, onState, STEPS, CITIES, CATS, TIER_LABEL, esc, $, $$, fmtDate, addDays, initials,
-  lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
+  lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, current, stageSeq, goPos, splitsFor, legsFor, confirmLeg, pickTally, hotelKey, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
   imageHtml, VERSION, cardImage, cardWiki, parseVideo, GROUPS, SLOTS, factLabels, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js?v=586234';
+} from './common.js?v=622549';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
@@ -40,18 +40,24 @@ render();
 
 function render() {
   if (!state.ready || !state.session) return;
-  const step = state.session.step || 'route';
-  const stepIdx = STEPS.findIndex((s) => s.id === step);
-  $('#steps').innerHTML = STEPS.map((s, i) => `
-    <button class="tv-step ${i === stepIdx ? 'active' : ''} ${i < stepIdx ? 'done' : ''}" data-step="${s.id}">
-      <span class="n">${i < stepIdx ? '✓' : i + 1}</span>${s.label}</button>`).join('');
+  const c = current();
+  const stepIdx = STEPS.findIndex((x) => x.id === c.step);
+  $('#steps').innerHTML = STEPS.map((x, i) => `
+    <button class="tv-step ${i === stepIdx ? 'active' : ''} ${i < stepIdx ? 'done' : ''}" data-step="${x.id}">
+      <span class="n">${i < stepIdx ? '✓' : i + 1}</span>${x.label}</button>`).join('');
   $$('#steps [data-step]').forEach((b) => (b.onclick = () => goStep(b.dataset.step)));
   $('#people').innerHTML = voters().map((v) => `<span class="avatar ${v.uid ? 'on' : ''}" title="${esc(v.name)}">${esc(initials(v.name))}</span>`).join('');
 
   const main = $('#main');
-  if (main.dataset.view !== step) { main.dataset.view = step; main.innerHTML = ''; }
-  ({ route: renderRoute, bases: renderBases, splits: renderSplits, days: renderDays })[step]?.(main);
-  $('#foot-center').textContent = (state.session.updatedBy ? `Last moved by ${state.session.updatedBy}` : 'Anyone can move the session from their phone, or use ← → here') + ` · version ${VERSION}`;
+  const view = c.step + (c.at.splits ? '-splits' : '');
+  if (main.dataset.view !== view) { main.dataset.view = view; main.innerHTML = ''; }
+  if (c.st.kind === 'rank') renderRoute(main);
+  else if (!lockedRoute()) main.innerHTML = `<div class="empty-big"><div><h3>No route locked yet</h3><p>Go back to Route, reveal the ranking and lock one in.</p></div></div>`;
+  else if (c.st.kind === 'pick') renderHotels(main, c);
+  else if (c.st.kind === 'leg') renderTravel(main, c);
+  else if (c.st.kind === 'tier') (c.at.splits ? renderSplits(main, c.st) : renderTier(main, c));
+  else renderDays(main);
+  $('#foot-center').textContent = `Phones vote · this screen drives (← → keys) · version ${VERSION}`;
 }
 
 // ---------------- Step 1: route ----------------
@@ -67,7 +73,7 @@ function renderRoute(main) {
 
   main.innerHTML = `
     <h2 class="h-section">${locked ? 'Route locked in' : reveal ? 'The group’s ranking' : 'Rank the four routes'}</h2>
-    <p class="lead">${locked ? 'Next we go base by base through the ideas.' : reveal ? 'Sorted by group score: each person’s 1st choice = 4 points, 2nd = 3, 3rd = 2, 4th = 1. Talk it over, then lock one in.' : `Everyone ranks 1st to 4th on their phone. ${vs.filter((v) => rankedUids.has(v.uid)).length} of ${vs.length} done:`}
+    <p class="lead">${locked ? 'Next: pick a hotel in each base.' : reveal ? 'Sorted by group score: each person’s 1st choice = 4 points, 2nd = 3, 3rd = 2, 4th = 1. Talk it over, then lock one in.' : `Everyone ranks 1st to 4th on their phone. ${vs.filter((v) => rankedUids.has(v.uid)).length} of ${vs.length} done:`}
       ${!reveal && !locked ? vs.map((v) => `<span class="chip" style="margin-left:.4em">${rankedUids.has(v.uid) ? '✅' : '⏳'} ${esc(v.name)}</span>`).join('') : ''}
       ${!locked ? `<button class="btn ${reveal ? '' : 'btn-primary'}" id="reveal" style="margin-left:1em" ${state.rankings.length ? '' : 'disabled'}>${reveal ? 'Hide results' : 'Reveal results'}</button>` : `<button class="btn" id="unlock" style="margin-left:1em">Unlock</button>`}
     </p>
@@ -96,22 +102,90 @@ function renderRoute(main) {
   $$('[data-lock]', main).forEach((b) => (b.onclick = () => lockRoute(b.dataset.lock)));
 }
 
-// ---------------- Step 2: bases ----------------
-function renderBases(main) {
-  const w = baseWalk();
-  if (!w.route) {
-    main.innerHTML = `<div class="empty-big"><div><h3>No route locked yet</h3><p>Go back to step 1, reveal the ranking and lock a route.</p></div></div>`;
-    main.dataset.view = 'bases-empty';
-    return;
-  }
+// ---------------- Hotels: pick one per city ----------------
+function pickers(names) {
+  return names?.length ? names.map((n) => `<span class="avatar v-must" title="${esc(n)}">${esc(initials(n))}</span>`).join('') : '<span class="muted tiny">No picks yet</span>';
+}
+function cityTabs(c) {
+  const cities = routeCities(lockedRoute());
+  return `<div class="base-tabs">${cities.map((city) => {
+    const idx = c.seq.findIndex((x) => x.city === city);
+    return `<button class="base-tab ${c.at.city === city ? 'active' : ''}" data-pos="${idx}" ${idx < 0 ? 'disabled' : ''}>${esc(CITIES[city])}</button>`;
+  }).join('')}</div>`;
+}
+function bindPos(main) { $$('[data-pos]', main).forEach((b) => (b.onclick = () => +b.dataset.pos >= 0 && goPos(+b.dataset.pos))); }
+
+function renderHotels(main, c) {
+  const r = lockedRoute();
+  const city = c.at.city;
+  const stays = r.bases.map((b, i) => ({ ...b, i })).filter((b) => b.city === city);
+  const nights = stays.reduce((n, b) => n + b.nights, 0);
+  const list = cardsFor(city).filter((x) => x.cat === 'hotel');
+  const tally = pickTally(hotelKey(city));
+  const chosen = chosenHotel(city);
+  main.innerHTML = `
+    <div class="stage-head">${cityTabs(c)}<span class="muted">Hotels · ${c.pos + 1} of ${c.seq.length}</span></div>
+    <h2 class="h-section">Where do we stay in ${esc(CITIES[city])}?</h2>
+    <p class="lead">${nights} night${nights === 1 ? '' : 's'} · ${stays.map((b) => baseDateRange(r, b.i)).join(' and ')} · Everyone taps their favourite on their phone. ${chosen ? `<span class="tier tier-must">✓ Chosen: ${esc(chosen.title)}</span>` : ''}</p>
+    <div class="option-grid cols-${Math.min(list.length, 4)}">
+      ${list.map((h) => `
+        <article class="option-card ${chosen?.id === h.id ? 'chosen' : ''}">
+          <div class="option-img">${imageHtml(h, 'fill')}</div>
+          <div class="option-body">
+            <h3>${esc(h.title)}</h3>
+            <p class="muted">${esc(h.pitch || '')}</p>
+            <div class="option-facts"><span>📍 ${esc(h.time || '')}</span><span>💶 ${esc(h.cost || '')}</span>${h.booking ? `<span>ℹ️ ${esc(h.booking)}</span>` : ''}</div>
+            ${h.highlights?.length ? `<ul class="option-list">${h.highlights.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+            <div class="option-foot"><div class="pickers">${pickers(tally[h.id])}</div>
+              ${chosen?.id === h.id ? `<button class="btn" data-unchoose="1">✓ Chosen</button>` : `<button class="btn btn-primary" data-choose="${h.id}">Choose</button>`}</div>
+          </div>
+        </article>`).join('') || '<p class="muted">No hotels listed for this city yet — add some from a phone.</p>'}
+    </div>`;
+  bindPos(main);
+  $$('[data-choose]', main).forEach((b) => (b.onclick = () => chooseHotel(city, b.dataset.choose)));
+  $$('[data-unchoose]', main).forEach((b) => (b.onclick = () => chooseHotel(city, null)));
+}
+
+// ---------------- Travel: pick one per leg ----------------
+function renderTravel(main, c) {
+  const legs = legsFor(lockedRoute());
+  const leg = legs[c.at.leg];
+  if (!leg) { main.innerHTML = '<div class="empty-big"><div><h3>No moves on this route</h3></div></div>'; return; }
+  const tally = pickTally(leg.key);
+  const confirmed = state.session.travel?.[leg.key];
+  main.innerHTML = `
+    <div class="stage-head"><div class="base-tabs">${legs.map((l) => `<button class="base-tab ${l.i === leg.i ? 'active' : ''}" data-pos="${l.i}">${esc(CITIES[l.from])} → ${esc(CITIES[l.to])}</button>`).join('')}</div>
+      <span class="muted">Travel · ${c.pos + 1} of ${c.seq.length}</span></div>
+    <h2 class="h-section">${esc(CITIES[leg.from])} → ${esc(CITIES[leg.to])}</h2>
+    <p class="lead">${fmtDate(leg.date, { weekday: 'long', month: 'long', day: 'numeric' })} · ${leg.options.length > 1 ? 'Everyone picks on their phone, then choose one here.' : 'Only one sensible way to do this leg.'}
+      ${leg.chosen ? `<span class="tier tier-must">✓ ${esc(leg.chosen.mode)}</span>` : ''}</p>
+    <div class="option-grid cols-${leg.options.length}">
+      ${leg.options.map((o) => `
+        <article class="option-card travel ${leg.chosen?.id === o.id ? 'chosen' : ''}">
+          <div class="option-body">
+            <div class="travel-icon">${o.icon}</div>
+            <h3>${esc(o.mode)}</h3>
+            <div class="option-facts big"><span>⏱ ${esc(o.time)}</span><span>💶 ${esc(o.cost)} per person</span></div>
+            <p>${esc(o.note)}</p>
+            <div class="option-foot"><div class="pickers">${leg.options.length > 1 ? pickers(tally[o.id]) : ''}</div>
+              ${leg.options.length === 1 ? '<span class="tier tier-must">✓ Set</span>' : confirmed === o.id ? `<button class="btn" data-unchoose="1">✓ Chosen</button>` : `<button class="btn btn-primary" data-choose="${o.id}">Choose</button>`}</div>
+          </div>
+        </article>`).join('')}
+    </div>`;
+  bindPos(main);
+  $$('[data-choose]', main).forEach((b) => (b.onclick = () => confirmLeg(leg.key, b.dataset.choose)));
+  $$('[data-unchoose]', main).forEach((b) => (b.onclick = () => confirmLeg(leg.key, null)));
+}
+
+// ---------------- Sights / Food / Shopping: one card at a time ----------------
+function renderTier(main, c) {
+  const w = { city: c.at.city, list: cardsFor(c.at.city).filter((x) => c.st.cats.includes(x.cat)) };
+  w.ci = Math.max(0, w.list.findIndex((x) => x.id === c.at.cardId));
+  w.card = w.list[w.ci];
   if (!$('.bases-layout', main)) {
     main.innerHTML = `
       <div class="bases-layout">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:1em">
-          <div class="base-tabs" id="base-tabs"></div>
-          <div class="muted" id="base-count"></div>
-        </div>
-        <div class="base-tabs group-tabs" id="group-tabs"></div>
+        <div class="stage-head" id="tier-head"></div>
         <div class="stage">
           <div class="stage-media" id="media"></div>
           <div class="stage-info" id="info"></div>
@@ -119,15 +193,9 @@ function renderBases(main) {
         <div class="filmstrip" id="strip"></div>
       </div>`;
   }
-  $('#base-tabs').innerHTML = w.cities.map((c, i) => `<button class="base-tab ${i === w.bi ? 'active' : ''}" data-base="${i}">${esc(CITIES[c])} · ${cardsFor(c).length} ideas</button>`).join('');
-  $$('[data-base]').forEach((b) => (b.onclick = () => setSession({ baseIndex: +b.dataset.base, groupIndex: 0, cardIndex: 0 })));
-  const hotel = chosenHotel(w.city);
-  $('#group-tabs').innerHTML = w.sections.map((sec, i) => `<button class="base-tab sub ${i === w.gi ? 'active' : ''}" data-group="${i}">${sec.group.icon} ${sec.group.label} · ${sec.list.length}</button>`).join('')
-    + `<span class="hotel-pill">${hotel ? `🛏️ Staying at <b>${esc(hotel.title)}</b>` : '🛏️ No hotel picked yet'}</span>`;
-  $$('[data-group]').forEach((b) => (b.onclick = () => setSession({ groupIndex: +b.dataset.group, cardIndex: 0 })));
-  $('#base-count').innerHTML = w.card ? `${esc(w.group?.label || '')} ${w.ci + 1} of ${w.list.length} in ${esc(CITIES[w.city])}
-    <span class="legend"><i class="dot-must"></i>Must do <i class="dot-if"></i>If time <i class="dot-skip"></i>Skip <i class="dot-split"></i>Split <i class="dot-none"></i>Not revealed</span>` : '';
-
+  $('#tier-head').innerHTML = `${cityTabs(c)}<span class="muted">${esc(c.st.label)} · ${esc(CITIES[w.city])} ${w.ci + 1} of ${w.list.length}
+    <span class="legend"><i class="dot-must"></i>Must do <i class="dot-if"></i>If time <i class="dot-skip"></i>Skip <i class="dot-split"></i>Split <i class="dot-none"></i>Not revealed</span></span>`;
+  bindPos(main);
   const card = w.card;
   if (!card) {
     $('#media').innerHTML = '';
@@ -171,9 +239,7 @@ function renderBases(main) {
     <div class="facts">
       ${factLabels(card).map((l, i) => `<div class="fact"><b>${l}</b>${esc([card.time, card.cost, card.booking][i] || '—')}</div>`).join('')}
     </div>
-    ${card.cat === 'hotel' ? `<div class="hotel-pick">${hotel?.id === card.id
-      ? `<span class="tier tier-must">✓ Our ${esc(CITIES[card.city])} hotel</span> <button class="btn btn-ghost" id="unpick">Clear</button>`
-      : `<button class="btn btn-primary" id="pick">Pick this hotel for ${esc(CITIES[card.city])}</button>`}</div>` : ''}
+
     <div class="vote-panel">
       <h4><span>Votes · ${voted.length} of ${vs.length}</span>
         ${!all ? `<button class="btn btn-ghost" id="reveal-card" style="font-size:.9em;padding:.3em .9em">${reveal ? 'Hide' : 'Reveal now (R)'}</button>` : ''}</h4>
@@ -190,14 +256,12 @@ function renderBases(main) {
         </div>` : `<p class="muted" style="margin:.5em 0 0;font-size:.8em">Results show when everyone has voted.</p>`}
     </div>`;
   $('#reveal-card') && ($('#reveal-card').onclick = revealCurrent);
-  $('#pick') && ($('#pick').onclick = () => chooseHotel(card.city, card.id));
-  $('#unpick') && ($('#unpick').onclick = () => chooseHotel(card.city, null));
 
-  $('#strip').innerHTML = w.list.map((c, i) => `
-    <div class="film ${i === w.ci ? 'active' : ''}" data-card="${i}">
-      ${imageHtml(c)}<span class="dot dot-${revealed(c) ? tierOf(c) : 'none'}"></span><p>${esc(c.title)}</p>
+  $('#strip').innerHTML = w.list.map((c2, i) => `
+    <div class="film ${i === w.ci ? 'active' : ''}" data-card="${c.seq.findIndex((x) => x.cardId === c2.id)}">
+      ${imageHtml(c2)}<span class="dot dot-${revealed(c2) ? tierOf(c2) : 'none'}"></span><p>${esc(c2.title)}</p>
     </div>`).join('');
-  $$('[data-card]').forEach((el) => (el.onclick = () => setSession({ cardIndex: +el.dataset.card })));
+  $$('[data-card]').forEach((el) => (el.onclick = () => goPos(+el.dataset.card)));
   const active = $('.film.active');
   active && active.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
@@ -208,32 +272,31 @@ function wikiBlurb(card) {
 }
 
 function togglePlay() {
-  const w = baseWalk();
-  if (!w.card) return;
-  local.playing = local.playing === w.card.id ? null : w.card.id;
+  const id = current().at.cardId;
+  if (!id) return;
+  local.playing = local.playing === id ? null : id;
   render();
 }
 function revealCurrent() {
-  const w = baseWalk();
-  if (state.session.step !== 'bases' || !w.card) return;
-  setSession({ reveal: { [w.card.id]: !state.session.reveal?.[w.card.id] } });
+  const id = current().at.cardId;
+  if (!id) return;
+  setSession({ reveal: { [id]: !state.session.reveal?.[id] } });
 }
 
 // ---------------- Step 3: splits ----------------
-function renderSplits(main) {
-  const r = lockedRoute();
-  if (!r) { main.innerHTML = `<div class="empty-big"><div><h3>No route locked yet</h3></div></div>`; return; }
-  const cities = routeCities(r);
-  const pool = sortedCards(state.cards.filter((c) => cities.includes(c.city)));
-  const splits = pool.filter((c) => !c.decision && autoTier(c) === 'split');
+function renderSplits(main, st) {
+  const cities = routeCities(lockedRoute());
+  const pool = sortedCards(state.cards.filter((c) => cities.includes(c.city) && st.cats.includes(c.cat)));
+  const splits = splitsFor(st);
   const decided = pool.filter((c) => c.decision);
   if (!splits.find((c) => c.id === local.splitSel)) local.splitSel = splits[0]?.id || null;
   const sel = splits.find((c) => c.id === local.splitSel);
   const counts = { must: 0, if: 0, skip: 0, none: 0 };
   pool.forEach((c) => { const t = tierOf(c); if (counts[t] != null) counts[t]++; });
+  const nextStep = STEPS[STEPS.findIndex((x) => x.id === st.id) + 1];
 
   main.innerHTML = `
-    <h2 class="h-section">Settle the splits</h2>
+    <h2 class="h-section">${esc(st.label)}: settle the splits</h2>
     <p class="lead">${splits.length ? `${splits.length} idea${splits.length === 1 ? '' : 's'} where someone said Must do and someone said Skip. Talk it over and decide.` : 'Nothing contested — nice.'}
       <span class="chip" style="margin-left:.6em">✅ ${counts.must} must</span> <span class="chip">🕐 ${counts.if} if time</span> <span class="chip">⏭ ${counts.skip} skip</span>
       ${counts.none ? `<span class="chip">⏳ ${counts.none} not voted</span>` : ''} ${decided.length ? `<span class="chip">🔨 ${decided.length} decided</span>` : ''}</p>
@@ -247,7 +310,7 @@ function renderSplits(main) {
           </div>`).join('')}
       </div>
       ${sel ? splitDetail(sel) : ''}
-    </div>` : `<div class="empty-big" style="height:60%"><div><h3>All settled</h3><p>Move on to building the days →</p></div></div>`}`;
+    </div>` : `<div class="empty-big" style="height:60%"><div><h3>All settled</h3><p>Next → ${esc(nextStep?.label || '')}</p></div></div>`}`;
   $$('[data-sel]', main).forEach((el) => (el.onclick = () => { local.splitSel = el.dataset.sel; render(); }));
   $$('[data-decide]', main).forEach((b) => (b.onclick = () => decide(local.splitSel, b.dataset.decide)));
 }

@@ -1,10 +1,10 @@
 import {
   boot, state, onState, STEPS, CITIES, CATS, VOTES, TIER_LABEL, esc, $, $$, fmtDate, addDays, initials,
-  lockedRoute, route, card, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep,
+  lockedRoute, route, card, routeCities, routeNights, baseDateRange, cardsFor, current, splitsFor, legsFor, pick, myPick, pickTally, hotelKey,
   voters, voteCounts, autoTier, tierOf, vote, saveCard, addCard, deleteCard, decide, scheduleCard, undo,
   setRanking, lockRoute, routeScores, planCards, addIdea, deleteIdea, setDayNote, addComment, watchComments,
   imageHtml, VERSION, cardWiki, parseVideo, GROUPS, SLOTS, groupOf, factLabels, mapsLink, chosenHotel, chooseHotel, travelFor, defaultSlot, youtubeSearch, sortedCards, signOut, isDemo, revealed,
-} from './common.js?v=586234';
+} from './common.js?v=622549';
 
 const root = document.getElementById('app');
 const ui = {
@@ -70,31 +70,27 @@ function voteButtons(c) {
 function bindVotes(scope) { $$('[data-vote]', scope).forEach((b) => (b.onclick = () => vote(b.dataset.card, b.dataset.vote))); }
 function myVoteTag(c) { const v = myVote(c); return `<span class="myvote ${v || 'none'}">${v ? VOTES.find((x) => x.id === v).short : 'Not voted'}</span>`; }
 
-// ---------------- NOW ----------------
+// ---------------- NOW: follows the TV; votes only, never moves it ----------------
 function viewNow(main) {
-  const s = state.session;
-  const step = s.step || 'route';
-  const idx = STEPS.findIndex((x) => x.id === step);
+  const c = current();
+  const idx = STEPS.findIndex((x) => x.id === c.step);
   let body = '';
-  if (step === 'route') body = nowRoute();
-  if (step === 'bases') body = nowBases();
-  if (step === 'splits') body = nowSplits();
-  if (step === 'days') body = planHtml();
+  if (c.st.kind === 'rank') body = nowRoute();
+  else if (!lockedRoute()) body = `<div class="ph-card"><h3>No route locked yet</h3><p class="muted" style="margin:0">The group locks a route on the TV first.</p></div>`;
+  else if (c.st.kind === 'pick') body = hotelPicker(c.at.city, true);
+  else if (c.st.kind === 'leg') body = legPicker(legsFor(lockedRoute())[c.at.leg], true);
+  else if (c.st.kind === 'tier') body = c.at.splits ? nowSplits(c.st) : nowCard(c);
+  else body = planHtml();
   main.innerHTML = `
-    <div class="now-banner"><span class="live"></span>On the TV · Step ${idx + 1}: ${STEPS[idx].label}</div>
-    <div class="step-pills">${STEPS.map((x, i) => `<button class="${x.id === step ? 'active' : ''}" data-step="${x.id}">${i + 1}. ${x.label}</button>`).join('')}</div>
+    <div class="now-banner"><span class="live"></span>On the TV · ${idx + 1}. ${STEPS[idx].label}</div>
+    <div class="step-pills">${STEPS.map((x, i) => `<span class="${x.id === c.step ? 'active' : ''}">${i + 1}. ${x.label}</span>`).join('')}</div>
     ${body}
-    <div class="nav-row"><button class="btn" id="back">← Back</button><button class="btn btn-primary" id="fwd">Next →</button></div>
-    <p class="tiny muted" style="text-align:center;margin-top:10px">Anyone can move the TV. ${s.updatedBy ? `Last moved by ${esc(s.updatedBy)}.` : ''}</p>`;
-  $$('[data-step]', main).forEach((b) => (b.onclick = () => goStep(b.dataset.step)));
-  $('#back').onclick = () => stepNav(-1);
-  $('#fwd').onclick = () => stepNav(1);
+    <p class="tiny muted" style="text-align:center;margin-top:12px">The TV moves on its own — vote at your pace. You can also vote ahead in <b>Ideas</b> and <b>Plan</b>.</p>`;
   bindVotes(main);
   bindRoute(main);
-  bindPlan(main);
-  $$('[data-open]', main).forEach((el) => (el.onclick = () => openCard(el.dataset.open)));
-  $$('[data-decide]', main).forEach((b) => (b.onclick = () => decide(b.dataset.id, b.dataset.decide)));
-  $$('[data-pick]', main).forEach((b) => (b.onclick = () => { const c = card(b.dataset.pick); chooseHotel(c.city, c.id); }));
+  bindPicks(main);
+  if (c.st.kind === 'days') bindPlan(main);
+  $$('[data-open]', main).forEach((el) => (el.onclick = (e) => { e.preventDefault(); openCard(el.dataset.open); }));
 }
 
 function nowRoute() {
@@ -102,12 +98,11 @@ function nowRoute() {
   if (locked) {
     return `<div class="ph-card"><span class="tier tier-must">✓ Locked</span><h2 style="margin-top:8px">${esc(locked.name)}</h2>
       <p class="muted" style="margin:0 0 8px">${esc(locked.tagline)}</p>
-      ${locked.bases.map((b, i) => `<div class="u-item-ph"><b class="grow">${esc(CITIES[b.city])}</b><span class="muted">${b.nights} nights · ${baseDateRange(locked, i)}</span></div>`).join('')}
-      <button class="btn" id="unlock" style="margin-top:10px">Unlock route</button></div>`;
+      ${locked.bases.map((b, i) => `<div class="u-item-ph"><b class="grow">${esc(CITIES[b.city])}</b><span class="muted">${b.nights} nights · ${baseDateRange(locked, i)}</span></div>`).join('')}</div>`;
   }
   const mine = state.rankings.find((r) => r.uid === state.me.uid);
   const routes = [...state.routes].sort((a, b) => a.order - b.order);
-  if (!routes.length) return `<div class="ph-card"><h2>No routes loaded yet</h2><p class="muted" style="margin:0">Bruno needs to open the Setup page and tap <b>Load starter content</b>. They’ll appear here straight away.</p></div>`;
+  if (!routes.length) return `<div class="ph-card"><h2>No routes loaded yet</h2><p class="muted" style="margin:0">Bruno needs to open the Setup page and tap <b>Load starter content</b>.</p></div>`;
   if (!ui.rankDraft || ui.rankDraft.length !== routes.length || ui.rankDraft.some((id) => !route(id))) {
     ui.rankDraft = mine?.order?.length === routes.length && mine.order.every((id) => route(id)) ? [...mine.order] : routes.map((r) => r.id);
   }
@@ -130,7 +125,7 @@ function nowRoute() {
     <div class="ph-card">
       <h3>${reveal ? 'Group ranking' : 'Who has ranked'}</h3>
       ${reveal
-        ? routeScores().map((s, i) => `<div class="u-item-ph"><b>#${i + 1}</b><span class="grow">${esc(s.route.name)}</span><span class="muted">${s.points} pts</span>${i === 0 ? `<button class="btn btn-primary" data-lock="${s.route.id}" style="padding:6px 12px">Lock</button>` : `<button class="btn" data-lock="${s.route.id}" style="padding:6px 12px">Lock</button>`}</div>`).join('')
+        ? routeScores().map((s, i) => `<div class="u-item-ph"><b>#${i + 1}</b><span class="grow">${esc(s.route.name)}</span><span class="muted">${s.points} pts</span></div>`).join('')
         : voters().map((v) => `<span class="chip" style="margin:0 6px 6px 0">${state.rankings.some((r) => r.uid === v.uid) ? '✅' : '⏳'} ${esc(v.name)}</span>`).join('')}
     </div>`;
 }
@@ -139,21 +134,60 @@ function bindRoute(main) {
   $$('[data-up]', main).forEach((b) => (b.onclick = () => move(+b.dataset.up, -1)));
   $$('[data-down]', main).forEach((b) => (b.onclick = () => move(+b.dataset.down, 1)));
   $('#save-rank', main) && ($('#save-rank', main).onclick = async () => { await setRanking([...ui.rankDraft]); toast('Ranking saved'); });
-  $('#unlock', main) && ($('#unlock', main).onclick = () => lockRoute(null));
-  $$('[data-lock]', main).forEach((b) => (b.onclick = () => lockRoute(b.dataset.lock)));
   $$('[data-route]', main).forEach((el) => (el.onclick = () => openRoute(el.dataset.route)));
 }
 
-function nowBases() {
-  const w = baseWalk();
-  if (!w.route) return `<div class="ph-card"><h3>No route locked yet</h3><p class="muted">Go back to step 1 and lock a route first.</p></div>`;
-  const c = w.card;
-  if (!c) return `<div class="ph-card"><h3>No ideas for ${esc(CITIES[w.city])} yet</h3><p class="muted">Add one from the Ideas tab.</p></div>`;
+/** Pick-one list of hotels for a city. */
+function hotelPicker(city, big) {
+  const list = cardsFor(city).filter((x) => x.cat === 'hotel');
+  const key = hotelKey(city);
+  const mine = myPick(key);
+  const tally = pickTally(key);
+  const chosen = chosenHotel(city);
+  return `<div class="ph-card">
+    <h${big ? 2 : 3} style="margin:0">🛏️ ${esc(CITIES[city])}</h${big ? 2 : 3}>
+    <p class="tiny muted" style="margin:4px 0 0">${chosen ? `✓ The group chose <b>${esc(chosen.title)}</b>` : 'Tap your favourite. Tap again to un-pick.'}</p>
+    ${list.map((h) => `
+      <div class="pick-row ${mine === h.id ? 'mine' : ''}" data-pickkey="${key}" data-pickid="${h.id}">
+        ${imageHtml(h)}
+        <div><h4>${mine === h.id ? '✅ ' : ''}${esc(h.title)}${chosen?.id === h.id ? ' <span class="tier tier-must">Chosen</span>' : ''}</h4>
+          <p>${esc(h.time || '')} · ${esc(h.cost || '')}</p>
+          <div class="who">${tally[h.id]?.length ? '👍 ' + tally[h.id].map(esc).join(', ') : ''} · <a href="#" data-open="${h.id}">details</a></div></div>
+      </div>`).join('') || '<p class="muted">No hotels yet — add one from Ideas.</p>'}
+  </div>`;
+}
+/** Pick-one list of ways to travel a leg. */
+function legPicker(leg, big) {
+  if (!leg) return '';
+  const mine = myPick(leg.key);
+  const tally = pickTally(leg.key);
+  const one = leg.options.length === 1;
+  return `<div class="ph-card">
+    <h${big ? 2 : 3} style="margin:0">${esc(CITIES[leg.from])} → ${esc(CITIES[leg.to])}</h${big ? 2 : 3}>
+    <p class="tiny muted" style="margin:4px 0 0">${fmtDate(leg.date)} · ${one ? 'Only one sensible option.' : leg.chosen && state.session.travel?.[leg.key] ? `✓ The group chose <b>${esc(leg.chosen.mode)}</b>` : 'Tap your preference.'}</p>
+    ${leg.options.map((o) => `
+      <div class="pick-row noimg ${!one && mine === o.id ? 'mine' : ''}" ${one ? '' : `data-pickkey="${leg.key}" data-pickid="${o.id}"`}>
+        <div class="ico">${o.icon}</div>
+        <div><h4>${!one && mine === o.id ? '✅ ' : ''}${esc(o.mode)}</h4>
+          <p>⏱ ${esc(o.time)} · 💶 ${esc(o.cost)} pp</p><p>${esc(o.note)}</p>
+          ${!one && tally[o.id]?.length ? `<div class="who">👍 ${tally[o.id].map(esc).join(', ')}</div>` : ''}</div>
+      </div>`).join('')}
+  </div>`;
+}
+function bindPicks(scope) {
+  $$('[data-pickkey]', scope).forEach((el) => (el.onclick = (e) => { if (e.target.closest('[data-open]')) return; pick(el.dataset.pickkey, el.dataset.pickid); }));
+}
+
+function nowCard(cur) {
+  const c = card(cur.at.cardId);
+  if (!c) return '';
+  const list = cardsFor(cur.at.city).filter((x) => cur.st.cats.includes(x.cat));
+  const k = list.findIndex((x) => x.id === c.id);
   const vs = voters();
   const votedN = vs.filter((v) => v.uid && c.votes?.[v.uid]).length;
   return `
     <div class="ph-card">
-      <div class="tiny muted" style="margin-bottom:8px">${esc(CITIES[w.city])} · ${w.group?.icon || ''} ${esc(w.group?.label || '')} ${w.ci + 1} of ${w.list.length}</div>
+      <div class="tiny muted" style="margin-bottom:8px">${esc(cur.st.label)} · ${esc(CITIES[cur.at.city])} · ${k + 1} of ${list.length}</div>
       <div class="ph-hero" data-open="${c.id}">${imageHtml(c)}</div>
       <div class="tiny muted">${CATS[c.cat]?.icon || ''} ${esc(CATS[c.cat]?.label || '')}</div>
       <h2 data-open="${c.id}">${esc(c.title)}</h2>
@@ -161,26 +195,20 @@ function nowBases() {
       ${c.highlights?.length ? `<ul class="ph-list">${c.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul>` : ''}
       <div class="facts-sm">${c.time ? `<span class="chip">⏱ ${esc(c.time)}</span>` : ''}${c.cost ? `<span class="chip">💶 ${esc(c.cost)}</span>` : ''}${c.booking ? `<span class="chip">🎟 ${esc(c.booking)}</span>` : ''}</div>
       ${voteButtons(c)}
-      ${c.cat === 'hotel' ? `<div style="margin-top:10px">${chosenHotel(c.city)?.id === c.id ? '<span class="tier tier-must">✓ Our hotel</span>' : `<button class="btn" data-pick="${c.id}" style="width:100%">Pick this hotel for ${esc(CITIES[c.city])}</button>`}</div>` : ''}
-      <p class="tiny muted" style="margin:10px 0 0">${votedN} of ${vs.length} have voted · <a href="#" data-open="${c.id}">details, video &amp; comments</a></p>
+      <p class="tiny muted" style="margin:10px 0 0">${votedN} of ${vs.length} have voted · <a href="#" data-open="${c.id}">details, map &amp; comments</a></p>
     </div>`;
 }
 
-function nowSplits() {
-  const r = lockedRoute();
-  if (!r) return `<div class="ph-card"><h3>No route locked yet</h3></div>`;
-  const cities = routeCities(r);
-  const splits = sortedCards(state.cards.filter((c) => cities.includes(c.city) && !c.decision && autoTier(c) === 'split'));
-  if (!splits.length) return `<div class="ph-card"><h3>Nothing contested 🎉</h3><p class="muted" style="margin:0">Move on to building the days.</p></div>`;
-  return splits.map((c) => {
+function nowSplits(st) {
+  const splits = splitsFor(st);
+  if (!splits.length) return `<div class="ph-card"><h3>Nothing contested 🎉</h3><p class="muted" style="margin:0">The TV moves on when you’re ready.</p></div>`;
+  return `<p class="muted" style="margin:0 0 8px">Talking these over on the TV — you can still change your vote.</p>` + splits.map((c) => {
     const vs = voters();
     const names = (t) => vs.filter((v) => c.votes?.[v.uid] === t).map((v) => esc(v.name)).join(', ') || '—';
     return `<div class="ph-card">
       <h3 data-open="${c.id}">${esc(c.title)} <span class="tiny muted">· ${esc(CITIES[c.city])}</span></h3>
       <p class="tiny" style="margin:0 0 4px"><b style="color:#9ee2b6">Must:</b> ${names('must')} · <b style="color:#f5d38e">If time:</b> ${names('if')} · <b>Skip:</b> ${names('skip')}</p>
-      <div class="vote-buttons">
-        <button data-decide="must" data-id="${c.id}">Must do</button><button data-decide="if" data-id="${c.id}">If time</button><button data-decide="skip" data-id="${c.id}">Skip</button>
-      </div></div>`;
+      ${voteButtons(c)}</div>`;
   }).join('');
 }
 
@@ -192,8 +220,8 @@ function viewCards(main) {
   let list = sortedCards(state.cards.filter((c) => (ui.city === 'all' ? cities.includes(c.city) : c.city === ui.city)));
   const inCity = list;
   if (ui.group !== 'all') list = list.filter((c) => groupOf(c) === ui.group);
-  const unvoted = list.filter((c) => !myVote(c)).length;
-  if (ui.onlyUnvoted) list = list.filter((c) => !myVote(c));
+  const unvoted = list.filter((c) => c.cat !== 'hotel' && !myVote(c)).length;
+  if (ui.onlyUnvoted) list = list.filter((c) => c.cat !== 'hotel' && !myVote(c));
   main.innerHTML = `
     <div class="chips-scroll">
       <button class="chip ${ui.city === 'all' ? 'sel' : ''}" data-city="all">All${r ? ' on route' : ''}</button>
@@ -208,7 +236,7 @@ function viewCards(main) {
       <div class="card-row" data-open="${c.id}">
         ${imageHtml(c)}
         <div><h4>${esc(c.title)}</h4>
-          <div class="meta">${CATS[c.cat]?.icon || ''} ${esc(CITIES[c.city])} ${chosenHotel(c.city)?.id === c.id ? '<span class="tier tier-must">Our hotel</span>' : ''} ${myVoteTag(c)} ${revealed(c) ? `<span class="tier tier-${tierOf(c)}">${TIER_LABEL[tierOf(c)]}</span>` : ''}</div></div>
+          <div class="meta">${CATS[c.cat]?.icon || ''} ${esc(CITIES[c.city])} ${chosenHotel(c.city)?.id === c.id ? '<span class="tier tier-must">Chosen</span>' : ''} ${c.cat === 'hotel' ? (myPick(hotelKey(c.city)) === c.id ? '<span class="myvote must">My pick</span>' : '') : myVoteTag(c)} ${revealed(c) ? `<span class="tier tier-${tierOf(c)}">${TIER_LABEL[tierOf(c)]}</span>` : ''}</div></div>
       </div>`).join('') : `<p class="muted">Nothing here yet — add the first idea.</p>`}
     <div style="height:70px"></div>`;
   $$('[data-city]', main).forEach((b) => (b.onclick = () => { ui.city = b.dataset.city; renderMain(true); }));
@@ -219,8 +247,14 @@ function viewCards(main) {
 
 // ---------------- PLAN ----------------
 function viewPlan(main) {
-  main.innerHTML = planHtml();
+  const r = lockedRoute();
+  const legs = r ? legsFor(r).filter((l) => l.options.length > 1) : [];
+  const ahead = r ? `<details class="ahead" id="ahead" ${ui.aheadOpen ? 'open' : ''}><summary>🛏️ Hotels &amp; 🚆 travel — pick ahead</summary>
+      ${routeCities(r).map((c) => hotelPicker(c)).join('')}${legs.map((l) => legPicker(l)).join('')}</details>` : '';
+  main.innerHTML = ahead + planHtml();
+  $('#ahead', main) && ($('#ahead', main).ontoggle = (e) => { ui.aheadOpen = e.target.open; });
   bindPlan(main);
+  bindPicks(main);
 }
 function planHtml() {
   const r = lockedRoute();
@@ -352,7 +386,6 @@ function openCard(id, tries = 0) {
     <table class="flights facts-table">${factLabels(c).map((l, i) => { const v = [c.time, c.cost, c.booking][i]; return v ? `<tr><th>${l}</th><td>${esc(v)}${i === 1 && c.costSource ? ` · <a href="${esc(c.costSource)}" target="_blank" rel="noopener">source ↗</a>` : ''}</td></tr>` : ''; }).join('')}</table>
     <div class="sheet-actions" style="margin-top:8px">
       <a class="btn" href="${esc(mapsLink(c))}" target="_blank" rel="noopener">📍 Google Maps</a>
-      ${c.cat === 'hotel' ? (chosenHotel(c.city)?.id === c.id ? `<button class="btn" id="unpick">✓ Our hotel · clear</button>` : `<button class="btn btn-primary" id="pick">Pick for ${esc(CITIES[c.city])}</button>`) : ''}
     </div>
     ${vid ? `<a class="btn" href="${esc(vid.url)}" target="_blank" rel="noopener">▶ Watch video</a>` : `<a class="btn" href="${esc(youtubeSearch(c))}" target="_blank" rel="noopener">🔎 Find a short video</a>`}
     <div id="sheet-votes"></div>
@@ -367,8 +400,6 @@ function openCard(id, tries = 0) {
   ui.sheet = { type: 'card', id };
   refreshSheet();
   if (c.link && !/google\.com\/maps/.test(c.link)) $('#wiki').insertAdjacentHTML('afterend', `<p style="margin:8px 0 0"><a href="${esc(c.link)}" target="_blank" rel="noopener">More info ↗</a></p>`);
-  $('#pick') && ($('#pick').onclick = async () => { await chooseHotel(c.city, c.id); toast('Hotel picked'); openCard(id); });
-  $('#unpick') && ($('#unpick').onclick = async () => { await chooseHotel(c.city, null); openCard(id); });
   $('#close').onclick = closeSheet;
   $('#edit').onclick = () => openEdit(id);
   $('#del').onclick = async () => { if (confirm(`Delete “${c.title}”? You can undo it from the Trip tab.`)) { await deleteCard(id); closeSheet(); toast('Deleted'); } };
@@ -384,18 +415,24 @@ function refreshSheet() {
   const vs = voters();
   const n = voteCounts(c);
   const t = tierOf(c);
-  el.innerHTML = `
+  if (c.cat === 'hotel') {
+    const key = hotelKey(c.city), mine = myPick(key) === c.id, chosen = chosenHotel(c.city)?.id === c.id;
+    const who = pickTally(key)[c.id] || [];
+    el.innerHTML = `<button class="btn ${mine ? '' : 'btn-primary'}" data-pickkey="${key}" data-pickid="${c.id}" style="width:100%;margin-top:12px">${mine ? '✅ My pick for ' : 'Make this my pick for '}${esc(CITIES[c.city])}</button>
+      <p class="tiny muted" style="margin:8px 0 0">${who.length ? '👍 ' + who.map(esc).join(', ') : 'Nobody has picked it yet'}${chosen ? ' · <span class="tier tier-must">Chosen by the group</span>' : ''}</p>`;
+    bindPicks(el);
+  } else {
+    el.innerHTML = `
     ${voteButtons(c)}
-    <p class="tiny muted" style="margin:10px 0 0">${n.n} of ${vs.length} voted · ${revealed(c) ? `<span class="tier tier-${t}">${TIER_LABEL[t]}${c.decision ? ' (decided)' : ''}</span>` : 'results show once everyone votes'}
-      ${c.decision ? `<a href="#" id="reopen">re-open</a>` : ''}</p>`;
-  bindVotes(el);
+    <p class="tiny muted" style="margin:10px 0 0">${n.n} of ${vs.length} voted · ${revealed(c) ? `<span class="tier tier-${t}">${TIER_LABEL[t]}${c.decision ? ' (decided on the TV)' : ''}</span>` : 'results show once everyone votes'}</p>`;
+    bindVotes(el);
+  }
   const w = cardWiki(c), wikiEl = $('#wiki');
   if (wikiEl && w && !wikiEl.dataset.done) {
     wikiEl.dataset.done = '1';
     wikiEl.innerHTML = `<div class="ph-section-title" style="margin-top:14px">About</div><p style="margin:0;font-size:14px;color:var(--muted);line-height:1.5">${esc(w.extract)}</p>
       ${w.url ? `<p class="tiny" style="margin:6px 0 0"><a href="${esc(w.url)}" target="_blank" rel="noopener">Read more on Wikipedia ↗</a></p>` : ''}`;
   }
-  $('#reopen') && ($('#reopen').onclick = (e) => { e.preventDefault(); decide(c.id, null); });
 }
 
 function openEdit(id, preset = {}) {
