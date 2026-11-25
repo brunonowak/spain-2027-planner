@@ -4,7 +4,7 @@ import {
   voters, voteCounts, autoTier, tierOf, vote, saveCard, addCard, deleteCard, decide, scheduleCard, undo,
   setRanking, lockRoute, routeScores, planCards, addIdea, deleteIdea, setDayNote, addComment, watchComments,
   imageHtml, parseVideo, youtubeSearch, sortedCards, signOut, isDemo, revealed,
-} from './common.js?v=579806';
+} from './common.js?v=579944';
 
 const root = document.getElementById('app');
 const ui = {
@@ -191,7 +191,7 @@ function viewCards(main) {
   main.innerHTML = `
     <div class="chips-scroll">
       <button class="chip ${ui.city === 'all' ? 'sel' : ''}" data-city="all">All${r ? ' on route' : ''}</button>
-      ${cities.map((c) => `<button class="chip ${ui.city === c ? 'sel' : ''}" data-city="${c}">${esc(CITIES[c])} · ${cardsFor(c).length}</button>`).join('')}
+      ${cities.map((c) => `<button class="chip ${ui.city === c ? 'sel' : ''}" data-city="${c}">${esc(CITIES[c])} · ${cardsFor(c).length} ideas</button>`).join('')}
     </div>
     <label class="toggle" style="margin-bottom:12px"><input type="checkbox" id="unv" ${ui.onlyUnvoted ? 'checked' : ''}> Only ideas I haven’t voted on (${unvoted})</label>
     ${list.length ? list.map((c) => `

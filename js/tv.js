@@ -3,7 +3,7 @@ import {
   lockedRoute, routeCities, routeNights, baseDateRange, cardsFor, baseWalk, stepNav, goStep, setSession,
   voters, voteCounts, autoTier, tierOf, decide, scheduleCard, lockRoute, routeScores, planCards,
   imageHtml, cardImage, parseVideo, youtubeSearch, sortedCards, isDemo, revealed,
-} from './common.js?v=579806';
+} from './common.js?v=579944';
 
 const root = document.getElementById('app');
 const local = { playing: null, splitSel: null, includeIf: false };
@@ -118,7 +118,7 @@ function renderBases(main) {
         <div class="filmstrip" id="strip"></div>
       </div>`;
   }
-  $('#base-tabs').innerHTML = w.cities.map((c, i) => `<button class="base-tab ${i === w.bi ? 'active' : ''}" data-base="${i}">${esc(CITIES[c])} · ${cardsFor(c).length}</button>`).join('');
+  $('#base-tabs').innerHTML = w.cities.map((c, i) => `<button class="base-tab ${i === w.bi ? 'active' : ''}" data-base="${i}">${esc(CITIES[c])} · ${cardsFor(c).length} ideas</button>`).join('');
   $$('[data-base]').forEach((b) => (b.onclick = () => setSession({ baseIndex: +b.dataset.base, cardIndex: 0 })));
   $('#base-count').textContent = w.card ? `Idea ${w.ci + 1} of ${w.list.length} in ${CITIES[w.city]}` : '';
 
